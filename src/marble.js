@@ -44,6 +44,22 @@ export class Marble {
     this.pos = new THREE.Vector3(0, R_COL + BALL_R + 6, 0);
     this.vel = new THREE.Vector3();
     this.grounded = false;
+
+    /**
+     * Strongest impact since the last read, as a normal velocity.
+     *
+     * Reported as a single peak rather than a list: several sub-steps can
+     * collide within one rendered frame, and firing a sound for each would
+     * machine-gun. The loudest one is the one you would actually hear.
+     */
+    this.impact = 0;
+  }
+
+  /** Read and clear the accumulated impact. */
+  takeImpact() {
+    const i = this.impact;
+    this.impact = 0;
+    return i;
   }
 
   get speed() {
@@ -103,7 +119,12 @@ export class Marble {
     _up.copy(pos).divideScalar(dist);
     pos.copy(_up).multiplyScalar(minD);
     const vn = vel.dot(_up);
-    if (vn < 0) vel.addScaledVector(_up, -vn * (1 + BOUNCE));
+    if (vn < 0) {
+      // Only landings count, not the constant micro-contact of resting on the
+      // ground. Below this the marble is simply in contact, not hitting.
+      if (-vn > 2.5 && -vn > this.impact) this.impact = -vn;
+      vel.addScaledVector(_up, -vn * (1 + BOUNCE));
+    }
     this.grounded = true;
   }
 
@@ -119,7 +140,12 @@ export class Marble {
       _n.divideScalar(d);
       pos.addScaledVector(_n, minD - d);
       const vn = vel.dot(_n);
-      if (vn < 0) vel.addScaledVector(_n, -vn * (1 + BOUNCE));
+      if (vn < 0) {
+        // Rocks get a lower threshold than the ground: hitting one is an
+        // event, whereas resting on the ground is the default state.
+        if (-vn > 0.8 && -vn > this.impact) this.impact = -vn;
+        vel.addScaledVector(_n, -vn * (1 + BOUNCE));
+      }
     }
   }
 

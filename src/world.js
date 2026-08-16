@@ -6,12 +6,13 @@ import { terrain, surface } from "./geometry.js";
 /**
  * Builds the planet, its furniture and its lighting into `scene`.
  *
- * Everything collidable is a capsule — a segment plus a radius. A boulder is a
- * capsule whose segment has zero length, a monument is one standing on end.
- * One collision routine covers both, which is the entire reason this project
- * does not need a physics engine yet.
+ * Everything collidable is a capsule — a line segment plus a radius. A boulder
+ * is a capsule whose segment has zero length, a monument is one standing on
+ * end. One collision routine covers the whole world, which is the entire
+ * reason this project does not need a physics engine.
  *
- * @returns {{capsules: Array, monuments: Array, lamp: THREE.PointLight|null}}
+ * Returns live handles as well as data, because the dawn transition has to
+ * drive these materials and lights every frame.
  */
 export function buildWorld(scene, P, content) {
   const rand = mulberry32(WORLD_SEED);
@@ -36,24 +37,25 @@ export function buildWorld(scene, P, content) {
   // The fill is doing real work, not mood. Without it the unlit hemisphere is
   // genuinely unusable, and "half the world is black" is a design failure
   // rather than atmosphere.
-  scene.add(new THREE.HemisphereLight(P.hemiSky, P.hemiGround, P.hemiInt));
+  const hemi = new THREE.HemisphereLight(P.hemiSky, P.hemiGround, P.hemiInt);
+  scene.add(hemi);
 
-  // A lamp riding with the marble. It only exists in palettes that have a dark
-  // half — in a daylit world it has nothing to do. It is what makes the night
-  // side somewhere to go rather than something to endure.
+  // A lamp riding with the marble. It exists only in palettes with a dark
+  // half, and it fades out as dawn breaks because you stop needing it.
   let lamp = null;
   if (P.lamp) {
-    lamp = new THREE.PointLight(P.lamp, 26, 26, 1.8);
+    lamp = new THREE.PointLight(P.lamp, P.lampInt, 26, 1.8);
     scene.add(lamp);
   }
 
   /* ---- stars ---- */
+  let starMat = null;
   if (P.stars > 0) {
     const n = 900;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
-      // acos of a uniform variable gives an even spread over the sphere.
-      // Uniform angles would crowd the poles.
+      // acos of a uniform variable spreads points evenly over the sphere.
+      // Uniform angles would crowd them at the poles.
       const t = Math.acos(2 * rand() - 1);
       const ph = rand() * Math.PI * 2;
       const d = 180 + rand() * 120;
@@ -63,18 +65,14 @@ export function buildWorld(scene, P, content) {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    scene.add(
-      new THREE.Points(
-        g,
-        new THREE.PointsMaterial({
-          color: 0x8e97ab,
-          size: 1.05,
-          sizeAttenuation: false,
-          transparent: true,
-          opacity: P.stars,
-        }),
-      ),
-    );
+    starMat = new THREE.PointsMaterial({
+      color: 0x8e97ab,
+      size: 1.05,
+      sizeAttenuation: false,
+      transparent: true,
+      opacity: P.stars,
+    });
+    scene.add(new THREE.Points(g, starMat));
   } else {
     // Burn the same draws so the rock scatter is identical across palettes.
     // Without this, switching palette silently rearranges the world.
@@ -93,30 +91,35 @@ export function buildWorld(scene, P, content) {
     }
     planetGeo.computeVertexNormals();
   }
-  const planet = new THREE.Mesh(
-    planetGeo,
-    new THREE.MeshStandardMaterial({
-      color: P.ground,
-      roughness: 0.95,
-      metalness: 0.0,
-      flatShading: true,
-    }),
-  );
+  const planetMat = new THREE.MeshStandardMaterial({
+    color: P.ground,
+    roughness: 0.95,
+    metalness: 0.0,
+    flatShading: true,
+  });
+  const planet = new THREE.Mesh(planetGeo, planetMat);
   planet.receiveShadow = true;
   scene.add(planet);
 
-  // A faint equator. Purely an orientation aid — without it, rolling on a
-  // featureless sphere gives you no sense of having gone anywhere.
-  const band = new THREE.Mesh(
-    new THREE.TorusGeometry(R + 0.45, 0.06, 6, 160),
-    new THREE.MeshBasicMaterial({ color: P.band, transparent: true, opacity: P.bandOp }),
-  );
+  // A faint equator. Purely an orientation aid — rolling on a featureless
+  // sphere gives you no sense of having gone anywhere.
+  const bandMat = new THREE.MeshBasicMaterial({
+    color: P.band,
+    transparent: true,
+    opacity: P.bandOp,
+  });
+  const band = new THREE.Mesh(new THREE.TorusGeometry(R + 0.45, 0.06, 6, 160), bandMat);
   band.rotation.x = Math.PI / 2;
   scene.add(band);
 
   /* ---- monuments ---- */
   const UP_Y = new THREE.Vector3(0, 1, 0);
   const UP_Z = new THREE.Vector3(0, 0, 1);
+  const monumentMat = new THREE.MeshStandardMaterial({
+    color: P.monument,
+    roughness: 0.7,
+    metalness: 0.05,
+  });
 
   content.forEach((item, i) => {
     const base = surface(item.lat, item.lon);
@@ -126,10 +129,7 @@ export function buildWorld(scene, P, content) {
     const rad = 1.15;
     const colour = P.accents[i % P.accents.length];
 
-    const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(rad * 0.8, rad, h, 18),
-      new THREE.MeshStandardMaterial({ color: P.monument, roughness: 0.7, metalness: 0.05 }),
-    );
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.8, rad, h, 18), monumentMat);
     pillar.position.copy(base).addScaledVector(up, h / 2);
     pillar.quaternion.setFromUnitVectors(UP_Y, up);
     pillar.castShadow = true;
@@ -137,23 +137,23 @@ export function buildWorld(scene, P, content) {
     scene.add(pillar);
 
     // The collar is what you actually notice from across the planet. The
-    // pillar is nearly invisible at range; the ring of colour is the hook.
-    const collar = new THREE.Mesh(
-      new THREE.TorusGeometry(rad * 1.05, 0.16, 8, 28),
-      new THREE.MeshStandardMaterial({
-        color: colour,
-        emissive: colour,
-        emissiveIntensity: 1.5,
-        roughness: 0.4,
-      }),
-    );
+    // pillar is near-invisible at range; the ring of colour is the hook.
+    const collarMat = new THREE.MeshStandardMaterial({
+      color: colour,
+      emissive: colour,
+      // Starts dim. Lighting it is the whole interaction.
+      emissiveIntensity: 0.35,
+      roughness: 0.4,
+    });
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(rad * 1.05, 0.16, 8, 28), collarMat);
     collar.position.copy(base).addScaledVector(up, h * 0.82);
     collar.quaternion.setFromUnitVectors(UP_Z, up);
     scene.add(collar);
 
     // A glow only pays for itself where there is dark to glow into.
+    let glow = null;
     if (P.lamp) {
-      const glow = new THREE.PointLight(colour, 9, 16, 2);
+      glow = new THREE.PointLight(colour, 0, 18, 2);
       glow.position.copy(base).addScaledVector(up, h * 0.86);
       scene.add(glow);
     }
@@ -162,7 +162,14 @@ export function buildWorld(scene, P, content) {
     monuments.push({
       label: item.label,
       href: item.href ?? null,
+      base: base.clone(),
       pos: base.clone().addScaledVector(up, h * 0.9),
+      colour,
+      collarMat,
+      glow,
+      lit: false,
+      // Drives the light-up animation, 0 to 1.
+      t: 0,
     });
   });
 
@@ -189,5 +196,41 @@ export function buildWorld(scene, P, content) {
     capsules.push({ a: c.clone(), b: c.clone(), r: rad });
   }
 
-  return { capsules, monuments, lamp, planet };
+  return {
+    capsules,
+    monuments,
+    lamp,
+    handles: { sun, hemi, lamp, starMat, planetMat, rockMat, monumentMat, bandMat },
+  };
+}
+
+/**
+ * Push an interpolated palette state onto the live scene.
+ *
+ * Called every frame while dawn is in progress and once at startup. Cheap —
+ * a handful of colour copies and scalar assignments.
+ */
+export function applyPaletteState(scene, renderer, handles, state) {
+  scene.background.copy(state.bg);
+  scene.fog.color.copy(state.bg);
+  scene.fog.near = state.fogNear;
+  scene.fog.far = state.fogFar;
+
+  renderer.toneMappingExposure = state.exposure;
+
+  handles.sun.color.copy(state.sun);
+  handles.sun.intensity = state.sunInt;
+
+  handles.hemi.color.copy(state.hemiSky);
+  handles.hemi.groundColor.copy(state.hemiGround);
+  handles.hemi.intensity = state.hemiInt;
+
+  handles.planetMat.color.copy(state.ground);
+  handles.rockMat.color.copy(state.rock);
+  handles.monumentMat.color.copy(state.monument);
+  handles.bandMat.color.copy(state.band);
+  handles.bandMat.opacity = state.bandOp;
+
+  if (handles.lamp) handles.lamp.intensity = state.lampInt;
+  if (handles.starMat) handles.starMat.opacity = state.stars;
 }

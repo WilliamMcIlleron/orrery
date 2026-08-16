@@ -21,8 +21,9 @@
   An interactive 3D world. A marble rolls around the surface of a small planet
   where gravity always points at its centre, so you cannot fall off. Use the
   arrow keys or W, A, S and D to roll, or drag anywhere on a touch screen.
-  Four monuments stand on the surface, each naming a project; rolling close to
-  one shows its name.
+  Four unlit monuments stand on the surface, each naming a project. Rolling
+  into one lights it and sounds a note; lighting all four breaks dawn over the
+  whole planet. Progress is announced as each one lights.
 </p>
 
 <div id="loading">loading…</div>
@@ -37,13 +38,17 @@
 <div id="hud">booting…</div>
 <div id="marker"></div>
 <div id="stick"><div class="base"></div><div class="knob"></div></div>
-<p id="hint">WASD / arrows &nbsp;·&nbsp; or drag anywhere to roll</p>
+
+<output id="progress" aria-live="polite" aria-label="0 of 4 monuments lit"></output>
+
+<p id="hint">roll into all four monuments to light them</p>
 
 <nav id="pal" aria-label="Colour palette">
   <button type="button" data-p="playground">Playground</button>
   <button type="button" data-p="deepfield">Deep field</button>
   <button type="button" data-p="dusk">Dusk</button>
   <button type="button" data-p="riso">Riso</button>
+  <button type="button" id="mute" aria-pressed="false" hidden>sound on</button>
 </nav>
 
 <script type="importmap">

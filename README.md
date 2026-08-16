@@ -7,8 +7,13 @@ no floor and no edge. Roll in one direction for about fourteen seconds and you
 arrive back where you started, having gone over a horizon that curves away from
 you the whole time.
 
-**Work in progress.** The world, the physics and the camera are done. Sound,
-textures and the thing that gives it a point are not — see [Where it is going](#where-it-is-going).
+You start in the dark. Four monuments stand on the surface, unlit. Roll into
+one and it lights and sounds a note. Light all four and dawn breaks over the
+whole planet.
+
+**Work in progress.** World, physics, camera, progression and sound are done.
+Texture work and monuments that actually open the project they name are not —
+see [Where it is going](#where-it-is-going).
 
 ## Running it
 
@@ -74,6 +79,42 @@ At this amplitude, against a marble of this size, the mismatch is invisible.
 What it buys is the ability to perceive your own speed: on a perfectly smooth
 sphere nothing passes you, and rolling feels identical at every velocity.
 
+### There are no audio files
+
+Every sound is synthesised at runtime from noise and oscillators. Nothing to
+download, nothing to license, and no two megabytes of MP3 attached to a page
+someone looks at for forty seconds.
+
+- **Rolling** is a loop of lightly integrated noise — closer to brown than
+  white, so it rumbles rather than hisses — through a lowpass filter. Speed
+  opens the filter *and* raises the gain, so going faster reads as brighter
+  rather than merely louder, which is what a real rolling object does. It cuts
+  out entirely mid-air; hearing a marble roll while it is in flight is uncanny.
+- **Knocks** are a short noise burst with the decay envelope baked into the
+  buffer, through a bandpass whose centre frequency rises with impact strength.
+  Rate limited, because a marble resting against a rock generates a contact
+  every frame and without the limit it machine-guns.
+- **Chimes** are two sine partials climbing a pentatonic run, one per monument.
+- **The dawn swell** is four slightly detuned oscillators over nine seconds.
+
+Nothing is built until the first real input event, because a browser will not
+let an audio context start outside a user gesture.
+
+### The dawn is a palette interpolation
+
+Each palette carries a `dawn` block of overrides, and the world lerps toward it
+once the last monument lights. Colours interpolate as `THREE.Color`, everything
+else as scalars, and the whole thing is driven by one eased value in the range
+0 to 1.
+
+Easing is smootherstep, which has zero first *and* second derivative at both
+ends, so the sky neither starts nor stops abruptly. There is a deliberate
+nine-tenths of a second of hold first: the chime for the fourth monument needs
+room to land, and an instant sunrise reads as a bug rather than a reward.
+
+The scene is only touched while the value is actually moving. Once dawn has
+landed it costs nothing for the rest of the session.
+
 ### The world is seeded
 
 `mulberry32` with a fixed seed, so the planet is byte-for-byte identical on
@@ -101,16 +142,21 @@ planets, and a bug you saw once might never come back.
 - A browser without WebGL gets a written explanation instead of a black rectangle.
 - Nothing autoplays, moves on its own, or flashes.
 
+## Development
+
+`?dev` on the URL exposes `window.__orrery` with the marble, the monuments and
+a `warpTo(i)` helper. Reaching a monument on the far side of the planet takes
+fifteen seconds of rolling, which is a slow way to check that dawn still works.
+It does not exist without the flag.
+
 ## Where it is going
 
-- **A reason to exist.** Start on the dark side; touching each monument lights
-  it; lighting all four breaks dawn over the whole planet. Right now you roll,
-  you find a pillar, and nothing happens.
-- **Sound.** Rolling loop pitched to speed, a knock per collision, one chord per
-  monument. Generated in code rather than sourced as files — no licensing, no
-  downloads, and it is a better story.
-- **Texture and material work**, and monuments that actually open the project
-  they name.
+- **Monuments that open the project they name.** They are labelled and lit;
+  they do not go anywhere yet.
+- **Texture and material work.** Everything is flat-shaded colour right now.
+- **Riso needs contour lines.** Cream on cream gives almost no shading
+  variation, so in that palette the terrain relief disappears and you lose the
+  ability to perceive your own speed — the exact thing the relief exists for.
 
 ## Credits
 

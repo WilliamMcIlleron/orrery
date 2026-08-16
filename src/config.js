@@ -69,3 +69,21 @@ export const WORLD_SEED = 20260816;
 
 /** How close you must be for a monument's label to appear. */
 export const LABEL_RANGE = 15;
+
+/**
+ * How close counts as touching a monument.
+ *
+ * Contact physically happens at 2.0 (pillar radius 1.15 plus marble 0.85).
+ * A little more than that so brushing past it counts — having to hit a pillar
+ * dead on would be a precision test, and this is not one.
+ */
+export const TOUCH_RANGE = 2.9;
+
+/** Seconds for a monument's light to rise once touched. */
+export const LIGHT_RISE = 0.8;
+
+/** Beat between the last monument lighting and the sky beginning to move. */
+export const DAWN_HOLD = 0.9;
+
+/** Seconds for dawn to break fully. */
+export const DAWN_SECONDS = 7;

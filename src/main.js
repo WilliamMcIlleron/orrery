@@ -1,11 +1,13 @@
 import * as THREE from "three";
-import { DT, MAX_STEPS, LABEL_RANGE } from "./config.js";
-import { PALETTES, resolvePaletteKey } from "./palettes.js";
+import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED } from "./config.js";
+import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
-import { buildWorld } from "./world.js";
+import { buildWorld, applyPaletteState } from "./world.js";
 import { Input } from "./input.js";
 import { Marble } from "./marble.js";
 import { ChaseCamera } from "./chase-camera.js";
+import { Progression } from "./progression.js";
+import { Audio } from "./audio.js";
 
 const paletteKey = resolvePaletteKey();
 const P = PALETTES[paletteKey];
@@ -35,13 +37,62 @@ document.getElementById("loading")?.remove();
 
 /* ------------------------------------------------------------------- world */
 
-const { capsules, monuments, lamp } = buildWorld(scene, P, CONTENT);
+const { capsules, monuments, lamp, handles } = buildWorld(scene, P, CONTENT);
 const marble = new Marble(scene, P);
 const chase = new ChaseCamera(camera);
 
-const hintEl = document.getElementById("hint");
+const paletteState = makePaletteState(P);
+applyPaletteState(scene, renderer, handles, paletteState);
+
+/* ------------------------------------------------------------------- audio */
+
+const audio = new Audio();
+const muteBtn = document.getElementById("mute");
+
+// Audio contexts cannot start outside a user gesture, so the engine is built
+// on the very first input rather than at load.
+function ensureAudio() {
+  audio.start();
+  if (muteBtn) muteBtn.hidden = false;
+}
+
+if (muteBtn) {
+  muteBtn.addEventListener("click", () => {
+    const next = !audio.muted;
+    audio.setMuted(next);
+    muteBtn.setAttribute("aria-pressed", String(next));
+    muteBtn.textContent = next ? "sound off" : "sound on";
+  });
+}
+
+/* ------------------------------------------------------------- progression */
+
+const progressEl = document.getElementById("progress");
+
+function renderProgress(lit, total) {
+  if (!progressEl) return;
+  // A row of dots, not a number. "2 / 4" reads as a task; four dots with two
+  // filled reads as something you are in the middle of.
+  progressEl.textContent = "●".repeat(lit) + "○".repeat(total - lit);
+  progressEl.setAttribute("aria-label", `${lit} of ${total} monuments lit`);
+}
+
+const progression = new Progression(monuments, {
+  onLight: (index, lit, total) => {
+    audio.chime(lit - 1);
+    renderProgress(lit, total);
+  },
+  onComplete: () => {
+    audio.swell(11);
+    if (progressEl) progressEl.classList.add("done");
+  },
+});
+renderProgress(0, progression.total);
+
 const input = new Input(renderer.domElement, document.getElementById("stick"));
+const hintEl = document.getElementById("hint");
 input.onFirstUse = () => {
+  ensureAudio();
   if (hintEl) hintEl.style.opacity = "0";
 };
 
@@ -49,7 +100,7 @@ input.onFirstUse = () => {
 
 const palBar = document.getElementById("pal");
 if (palBar) {
-  for (const btn of palBar.querySelectorAll("button")) {
+  for (const btn of palBar.querySelectorAll("button[data-p]")) {
     btn.setAttribute("aria-pressed", String(btn.dataset.p === paletteKey));
     btn.addEventListener("click", () => {
       // Reload rather than rebuild every material in place. The world is
@@ -88,13 +139,14 @@ function updateMarker() {
     return;
   }
   _proj.copy(best.pos).project(camera);
-  // z > 1 means behind the near plane; projecting it would place the label on
+  // z > 1 means behind the near plane; projecting it would put the label on
   // the wrong side of the screen.
   if (_proj.z > 1) {
     markerEl.style.opacity = "0";
     return;
   }
   markerEl.textContent = best.label;
+  markerEl.classList.toggle("lit", best.lit);
   markerEl.style.left = `${(_proj.x * 0.5 + 0.5) * innerWidth}px`;
   markerEl.style.top = `${(-_proj.y * 0.5 + 0.5) * innerHeight}px`;
   markerEl.style.opacity = "1";
@@ -108,6 +160,7 @@ let last = performance.now();
 let frames = 0;
 let fpsAcc = 0;
 let workAcc = 0;
+let lastDawn = -1;
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -134,6 +187,21 @@ function frame(now) {
     const d = marble.pos.length();
     lamp.position.copy(marble.pos).multiplyScalar((d + 2.2) / d);
   }
+
+  progression.update(marble.pos, wall);
+
+  // Only touch the scene while dawn is actually moving. Once it has landed
+  // this costs nothing for the rest of the session.
+  const dawn = progression.easedDawn;
+  if (dawn !== lastDawn) {
+    applyDawn(paletteState, P, dawn);
+    applyPaletteState(scene, renderer, handles, paletteState);
+    lastDawn = dawn;
+  }
+
+  audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded);
+  const hit = marble.takeImpact();
+  if (hit) audio.knock(hit);
 
   chase.update(marble.pos, marble.vel, wall);
   updateMarker();
@@ -164,9 +232,24 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+// Dev handle, off unless asked for. Reaching a monument on the far side of the
+// planet takes fifteen seconds of rolling, which is a slow way to check that
+// dawn works. `?dev` lets a test put the marble where it needs to be.
+if (location.search.includes("dev")) {
+  window.__orrery = {
+    marble, monuments, progression, audio, scene, renderer, handles, P,
+    /** Drop the marble next to monument `i`, on the surface. */
+    warpTo(i) {
+      const m = monuments[i];
+      marble.pos.copy(m.base).setLength(marble.pos.length());
+      marble.vel.set(0, 0, 0);
+    },
+  };
+}
+
 requestAnimationFrame(frame);
 
 // Nothing in this scene animates on its own — the world is completely still
-// until you move it. That is a deliberate property, and it is why
-// prefers-reduced-motion needs no special case here. Keep it that way: any
+// until you move it, and dawn only happens because you made it happen. That is
+// why prefers-reduced-motion needs no special case here. Keep it that way: any
 // idle animation added later has to be gated on that query.
