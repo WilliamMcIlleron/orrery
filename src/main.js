@@ -9,6 +9,8 @@ import { ChaseCamera } from "./chase-camera.js";
 import { Progression } from "./progression.js";
 import { Audio } from "./audio.js";
 import { Wayfinder } from "./wayfinder.js";
+import { createAtmosphere } from "./atmosphere.js";
+import { Post } from "./postfx.js";
 
 const paletteKey = resolvePaletteKey();
 const P = PALETTES[paletteKey];
@@ -39,6 +41,8 @@ document.getElementById("loading")?.remove();
 /* ------------------------------------------------------------------- world */
 
 const { capsules, monuments, lamp, handles } = buildWorld(scene, P, CONTENT);
+const atmosphere = createAtmosphere(scene, P);
+const post = new Post(renderer, scene, camera, P);
 const marble = new Marble(scene, P);
 const chase = new ChaseCamera(camera);
 
@@ -63,6 +67,7 @@ applyPaletteState(scene, renderer, handles, paletteState);
   root.setProperty("--ink-soft", light ? "#6f6858" : "#7c8394");
   root.setProperty("--ink-done", light ? "#a8631a" : "#ffd9a8");
   root.setProperty("--ink-shadow", light ? "0 1px 3px rgba(255,255,255,.75)" : "0 1px 4px rgba(0,0,0,.9)");
+  root.setProperty("--scrim", light ? "rgba(246,242,232,.88)" : "rgba(6,8,14,.84)");
 }
 
 /* ------------------------------------------------------------------- audio */
@@ -118,10 +123,25 @@ const progression = new Progression(monuments, {
 });
 renderProgress(0, progression.total);
 
+const introEl = document.getElementById("intro");
+
+function dismissIntro() {
+  if (!introEl || introEl.classList.contains("gone")) return;
+  introEl.classList.add("gone");
+  setTimeout(() => introEl.remove(), 900);
+}
+
+// Backstop. Someone who just watches should not be reading the same card a
+// minute later — the world is the point, and the card has said its piece.
+setTimeout(dismissIntro, 9000);
+
 const input = new Input(renderer.domElement, document.getElementById("stick"));
 input.onFirstUse = () => {
   ensureAudio();
   if (hintEl) hintEl.style.opacity = "0";
+  // The card is the first thing anyone sees, and it should leave the instant
+  // they show they do not need it.
+  dismissIntro();
 };
 
 /* ----------------------------------------------------------------- palette */
@@ -238,7 +258,9 @@ addEventListener("keydown", (e) => {
 
 /* -------------------------------------------------------------------- loop */
 
-const hudEl = document.getElementById("hud");
+const DEV = location.search.includes("dev");
+const hudEl = DEV ? document.getElementById("hud") : null;
+if (hudEl) hudEl.hidden = false;
 let accumulator = 0;
 let last = performance.now();
 let frames = 0;
@@ -269,7 +291,7 @@ function frame(now) {
   marble.sync();
   if (lamp) {
     const d = marble.pos.length();
-    lamp.position.copy(marble.pos).multiplyScalar((d + 2.2) / d);
+    lamp.position.copy(marble.pos).multiplyScalar((d + 4.2) / d);
   }
 
   progression.update(marble.pos, wall);
@@ -281,6 +303,9 @@ function frame(now) {
   if (dawn !== lastDawn) {
     applyDawn(paletteState, P, dawn);
     applyPaletteState(scene, renderer, handles, paletteState);
+    atmosphere.uniforms.uColor.value.copy(paletteState.atmoColor);
+    atmosphere.uniforms.uIntensity.value = paletteState.atmoInt;
+    post.setBloomStrength(paletteState.bloomStrength);
     lastDawn = dawn;
   }
 
@@ -290,7 +315,7 @@ function frame(now) {
 
   chase.update(marble.pos, marble.vel, wall);
   updateMarker();
-  renderer.render(scene, camera);
+  post.render(now * 0.001);
 
   const t1 = performance.now();
   workAcc += t1 - t0;
@@ -315,6 +340,7 @@ addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  post.setSize(innerWidth, innerHeight);
 });
 
 // Dev handle, off unless asked for. Reaching a monument on the far side of the
@@ -323,7 +349,7 @@ addEventListener("resize", () => {
 if (location.search.includes("dev")) {
   window.__orrery = {
     marble, monuments, progression, audio, scene, renderer, handles, P,
-    camera, chase, wayfinder, capsules,
+    camera, chase, wayfinder, capsules, post, atmosphere,
     /** Drop the marble next to monument `i`, on the surface. */
     warpTo(i) {
       const m = monuments[i];

@@ -53,6 +53,9 @@ export class Progression {
       const flare = m.t < 1 ? 1 + Math.sin(m.t * Math.PI) * 1.6 : 1;
       m.collarMat.emissiveIntensity = 0.35 + m.t * 1.5 * flare;
       if (m.glow) m.glow.intensity = m.t * 11 * flare;
+      // The beam overshoots hard and settles low: it should punch on ignition
+      // and then sit there as a landmark rather than shouting permanently.
+      if (m.beamMat) m.beamMat.uniforms.uOpacity.value = m.t * 0.42 * flare;
     }
 
     // --- dawn ---

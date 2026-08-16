@@ -29,10 +29,12 @@ export class Marble {
       new THREE.IcosahedronGeometry(BALL_R, 3),
       new THREE.MeshStandardMaterial({
         color: P.marble,
-        roughness: 0.28,
+        roughness: 0.45,
         // A glossy marble needs something to reflect. In the flat palettes
-        // there is nothing, and the highlight just reads as a smudge.
-        metalness: P.lamp ? 0.35 : 0.05,
+        // there is nothing, and the highlight just reads as a smudge. Kept low
+        // even where there is: a mirror-bright marble under its own lamp is
+        // the brightest thing on screen and bloom turns it into a fireball.
+        metalness: P.lamp ? 0.18 : 0.05,
         flatShading: true,
       }),
     );

@@ -23,7 +23,11 @@ export function buildWorld(scene, P, content) {
   const sun = new THREE.DirectionalLight(P.sun, P.sunInt);
   sun.position.set(60, 80, 40);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  // 2048 across a frustum 90 units wide puts a shadow texel at about 0.044
+  // units. At 1024 the marble's own shadow was a soft blob rather than a
+  // contact shadow, and a contact shadow is most of what sells the marble
+  // as touching the ground.
+  sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera;
   sc.near = 20;
   sc.far = 220;
@@ -44,7 +48,10 @@ export function buildWorld(scene, P, content) {
   // half, and it fades out as dawn breaks because you stop needing it.
   let lamp = null;
   if (P.lamp) {
-    lamp = new THREE.PointLight(P.lamp, P.lampInt, 26, 1.8);
+    // Range and decay tuned so it lights the ground rather than the marble.
+    // Sat too close, its own lamp turned the marble into the brightest thing
+    // in the scene and bloom happily made it a fireball.
+    lamp = new THREE.PointLight(P.lamp, P.lampInt, 30, 1.6);
     scene.add(lamp);
   }
 
@@ -121,16 +128,15 @@ export function buildWorld(scene, P, content) {
   planet.receiveShadow = true;
   scene.add(planet);
 
-  // A faint equator. Purely an orientation aid — rolling on a featureless
-  // sphere gives you no sense of having gone anywhere.
-  const bandMat = new THREE.MeshBasicMaterial({
-    color: P.band,
-    transparent: true,
-    opacity: P.bandOp,
-  });
-  const band = new THREE.Mesh(new THREE.TorusGeometry(R + 0.45, 0.06, 6, 160), bandMat);
-  band.rotation.x = Math.PI / 2;
-  scene.add(band);
+  /*
+   * The equator band is gone.
+   *
+   * It was added when the planet was a smooth featureless sphere and rolling
+   * gave you no sense of having travelled. Terrain relief, scattered rock and
+   * lit beams all do that job better now, and once bloom went in the thin
+   * torus read as a stray green arc floating above the ground — an artifact
+   * rather than an aid. Removing a crutch once it stops carrying weight.
+   */
 
   /* ---- monuments ---- */
   const UP_Y = new THREE.Vector3(0, 1, 0);
@@ -149,8 +155,27 @@ export function buildWorld(scene, P, content) {
     const rad = 1.15;
     const colour = P.accents[i % P.accents.length];
 
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.8, rad, h, 18), monumentMat);
-    pillar.position.copy(base).addScaledVector(up, h / 2);
+    /*
+     * A lathed obelisk rather than a cylinder.
+     *
+     * The profile is eight points revolved around the axis: a wide plinth, a
+     * step, a long taper, and a narrow shoulder near the top. It costs the
+     * same as the cylinder it replaced and stops the world looking like a set
+     * of default primitives, which was the single loudest thing making this
+     * read as a tech demo.
+     */
+    const profile = [
+      new THREE.Vector2(0.0, 0.0),
+      new THREE.Vector2(rad * 1.34, 0.0),
+      new THREE.Vector2(rad * 1.34, h * 0.055),
+      new THREE.Vector2(rad * 1.02, h * 0.085),
+      new THREE.Vector2(rad * 0.95, h * 0.70),
+      new THREE.Vector2(rad * 0.78, h * 0.80),
+      new THREE.Vector2(rad * 0.72, h * 0.95),
+      new THREE.Vector2(0.0, h),
+    ];
+    const pillar = new THREE.Mesh(new THREE.LatheGeometry(profile, 22), monumentMat);
+    pillar.position.copy(base);
     pillar.quaternion.setFromUnitVectors(UP_Y, up);
     pillar.castShadow = true;
     pillar.receiveShadow = true;
@@ -165,10 +190,65 @@ export function buildWorld(scene, P, content) {
       emissiveIntensity: 0.35,
       roughness: 0.4,
     });
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(rad * 1.05, 0.16, 8, 28), collarMat);
-    collar.position.copy(base).addScaledVector(up, h * 0.82);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(rad * 0.92, 0.13, 10, 30), collarMat);
+    collar.position.copy(base).addScaledVector(up, h * 0.755);
     collar.quaternion.setFromUnitVectors(UP_Z, up);
     scene.add(collar);
+
+    /*
+     * A beam of light that fires when the monument lights.
+     *
+     * An open-ended cone, additive, fading out with height and towards its own
+     * silhouette so it has no visible edge. This is the thing you can see from
+     * the far side of the planet once it is lit, and it is what turns "four
+     * pillars somewhere" into a map you can read at a glance.
+     */
+    const beamMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(colour) },
+        uOpacity: { value: 0 },
+      },
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vView;
+        void main() {
+          vUv = uv;
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vView = mv.xyz;
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vView;
+        void main() {
+          // Fade out with height, and hardest at the very top.
+          float up = pow(1.0 - vUv.y, 1.6);
+          // Brighter edge-on, so it reads as a volume rather than a sheet.
+          float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(-vView))), 1.5);
+          float a = up * (0.28 + rim * 0.85) * uOpacity;
+          gl_FragColor = vec4(uColor * a, a);
+        }
+      `,
+    });
+    const beamH = 26;
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(rad * 2.6, rad * 0.5, beamH, 20, 1, true),
+      beamMat,
+    );
+    beam.position.copy(base).addScaledVector(up, h * 0.72 + beamH / 2);
+    beam.quaternion.setFromUnitVectors(UP_Y, up);
+    beam.renderOrder = 3;
+    scene.add(beam);
 
     // A glow only pays for itself where there is dark to glow into.
     let glow = null;
@@ -187,6 +267,7 @@ export function buildWorld(scene, P, content) {
       pos: base.clone().addScaledVector(up, h * 0.9),
       colour,
       collarMat,
+      beamMat,
       glow,
       lit: false,
       // Drives the light-up animation, 0 to 1.
@@ -245,7 +326,7 @@ export function buildWorld(scene, P, content) {
     capsules,
     monuments,
     lamp,
-    handles: { sun, hemi, lamp, starMat, planetMat, rockMat, monumentMat, bandMat },
+    handles: { sun, hemi, lamp, starMat, planetMat, rockMat, monumentMat },
   };
 }
 
@@ -273,8 +354,6 @@ export function applyPaletteState(scene, renderer, handles, state) {
   handles.planetMat.color.copy(state.ground);
   handles.rockMat.color.copy(state.rock);
   handles.monumentMat.color.copy(state.monument);
-  handles.bandMat.color.copy(state.band);
-  handles.bandMat.opacity = state.bandOp;
 
   if (handles.lamp) handles.lamp.intensity = state.lampInt;
   if (handles.starMat) handles.starMat.opacity = state.stars;

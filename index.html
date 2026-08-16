@@ -35,7 +35,18 @@
   </p>
 </div>
 
-<div id="hud">booting…</div>
+<!-- Debug readout. Hidden unless ?dev — a framerate counter in the corner is
+     most of what makes a finished piece read as somebody's test build. -->
+<div id="hud" hidden>booting…</div>
+
+<div id="intro">
+  <div class="card">
+    <h2>Orrery</h2>
+    <p>A small world. Gravity points at its centre, so there is no edge to fall off.</p>
+    <p class="go">drag anywhere, or use the arrow keys</p>
+  </div>
+</div>
+
 <a id="marker" target="_blank" rel="noopener noreferrer"></a>
 <div id="wayfinder" role="status" aria-live="off"><span></span></div>
 <div id="stick"><div class="base"></div><div class="knob"></div></div>
@@ -55,7 +66,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
   }
 }
 </script>

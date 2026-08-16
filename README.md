@@ -152,6 +152,42 @@ scattered rocks, and it will happily drop a boulder on top of a monument or
 wall one in. Rejecting candidates that land too close to anything already
 placed costs a few hundred cheap distance checks and fixes both.
 
+### What it is rendered with
+
+Three passes on top of the scene, and the reason for each:
+
+- **Bloom** is what makes an emissive material read as a *light source* rather
+  than as a bright patch of paint. Half resolution — bloom is a blur, nobody
+  has ever noticed it being blurrier, and it costs a quarter of the fill rate.
+  The threshold matters more than the strength: set too low, the marble under
+  its own travelling lamp becomes the brightest thing on screen and bloom
+  turns it into a fireball. It is above 1.0 so only genuinely emissive things
+  bloom.
+- **A fresnel atmosphere**: a sphere 5.5% larger than the world, rendered
+  inside-out and additively, invisible where you look straight through it and
+  brightest where your sight line grazes the surface. That is the geometry
+  that makes a real atmosphere a bright rim from orbit. Without it the planet
+  is a hard-edged shape cut out of the background.
+- **Vignette and a whisper of grain**, after tone mapping so "darken the
+  corners by 12%" means what it says. The grain earns its place: large smooth
+  gradients — a sky, an unlit hemisphere — band into visible steps at 8 bits
+  per channel, and a little noise dithers the boundary away.
+
+Riso gets none of it. A print does not glow, and adding bloom would just make
+it look like the other three.
+
+### The monuments are lathed, not extruded
+
+An eight-point profile revolved around the axis: plinth, step, long taper,
+narrow shoulder. It costs the same as the cylinder it replaced. Default
+primitives are most of what makes a 3D scene read as somebody's test build,
+and a cylinder with a ring on it was the loudest offender here.
+
+When one lights it fires a beam — an open-ended cone, additive, fading with
+height and toward its own silhouette so it has no visible edge. That beam is
+what you can see from the far side of the planet, and it turns "four pillars
+somewhere" into a map you can read at a glance.
+
 ### The world is seeded
 
 `mulberry32` with a fixed seed, so the planet is byte-for-byte identical on
@@ -173,6 +209,13 @@ planets, and a bug you saw once might never come back.
 - **The overlay picks its ink from the background's luminance.** Two palettes
   are nearly black and two nearly white; pale grey text worked until it did
   not.
+- **There is no framerate counter.** It is behind `?dev`, because a stats
+  readout in the corner is most of what makes a finished piece read as a test
+  build.
+- **The equator band was deleted.** It was an orientation crutch from when the
+  planet was a smooth featureless sphere. Relief, rocks and beams do that job
+  better, and under bloom the thin torus read as a stray arc floating above the
+  ground.
 - **Device pixel ratio is capped at 2.** Phones report 3 and above; rendering
   at that buys nothing visible on a low-poly scene and costs a lot of heat.
 - **Nothing animates on its own.** The world is completely still until you move
@@ -197,7 +240,9 @@ It does not exist without the flag.
 
 ## Where it is going
 
-- **Texture and material work.** Everything is flat-shaded colour right now.
+- **Surface texture.** Materials are still flat colour; the shapes and light do
+  all the work.
+- **Dust off the marble at speed**, and a trail on the ground.
 - **More than four monuments**, once there is more worth putting on the planet.
 
 ## Credits
