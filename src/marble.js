@@ -80,6 +80,9 @@ export class Marble {
     /** Seconds since last touching the ground. Drives coyote time. */
     this.airborneFor = 0;
 
+    /** True on the frame the marble returns to ground after real airtime. */
+    this.landed = false;
+
     /** Set by the input layer; consumed on the next grounded step. */
     this.jumpQueued = false;
   }

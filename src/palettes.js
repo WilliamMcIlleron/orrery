@@ -27,6 +27,13 @@ export const PALETTES = {
   playground: {
     name: "Playground",
     note: "daylit · no night side",
+    // Bright, clean, faintly warm. Almost no split — a toy world should not
+    // look photographed.
+    grade: {
+      vignette: 0.34, grain: 0.022,
+      lift: [0.004, 0.005, 0.002], gamma: [1.0, 1.0, 0.99], gain: [1.02, 1.02, 1.0],
+      splitShadow: [0.97, 1.0, 1.05], splitHigh: [1.04, 1.01, 0.96], splitAmount: 0.3,
+    },
     reliefShade: 0.16,
     atmoColor: 0xbfe6ff, atmoInt: 0.55, atmoPower: 4.0,
     bloomStrength: 0.30, bloomRadius: 0.6, bloomThreshold: 1.25,
@@ -49,6 +56,14 @@ export const PALETTES = {
   deepfield: {
     name: "Deep field",
     note: "void · night side + travelling lamp",
+    // Cool shadows, warm highlights — the classic opposition, and the reason
+    // a night scene reads as cold without every pixel being blue. Shadows are
+    // lifted a touch so the unlit hemisphere keeps detail instead of clipping.
+    grade: {
+      vignette: 0.52, grain: 0.032,
+      lift: [0.006, 0.009, 0.016], gamma: [1.0, 1.01, 1.04], gain: [1.02, 1.0, 0.98],
+      splitShadow: [0.86, 0.94, 1.14], splitHigh: [1.1, 1.03, 0.92], splitAmount: 0.42,
+    },
     reliefShade: 0.15,
     atmoColor: 0x7fb4ff, atmoInt: 1.05, atmoPower: 3.6,
     bloomStrength: 1.05, bloomRadius: 0.5, bloomThreshold: 1.12,
@@ -74,6 +89,13 @@ export const PALETTES = {
   dusk: {
     name: "Dusk",
     note: "warm terracotta · keeps night side",
+    // Pushed hardest of the four. Deep blue-violet shadows against a strongly
+    // warm key is what makes terracotta read as evening rather than as orange.
+    grade: {
+      vignette: 0.5, grain: 0.03,
+      lift: [0.008, 0.005, 0.014], gamma: [1.0, 0.99, 1.02], gain: [1.04, 1.0, 0.97],
+      splitShadow: [0.84, 0.9, 1.18], splitHigh: [1.12, 1.02, 0.88], splitAmount: 0.46,
+    },
     reliefShade: 0.15,
     atmoColor: 0xff9a5c, atmoInt: 1.1, atmoPower: 3.4,
     bloomStrength: 1.0, bloomRadius: 0.5, bloomThreshold: 1.10,
@@ -95,6 +117,13 @@ export const PALETTES = {
   riso: {
     name: "Riso",
     note: "flat print · no night side",
+    // A print has no vignette and no blacks. Lift hard, pull gain down, and
+    // let the ink sit in a narrow band — that compression *is* the look.
+    grade: {
+      vignette: 0.1, grain: 0.026,
+      lift: [0.035, 0.032, 0.024], gamma: [0.98, 0.98, 0.97], gain: [0.95, 0.95, 0.94],
+      splitShadow: [0.96, 0.97, 1.02], splitHigh: [1.03, 1.0, 0.94], splitAmount: 0.26,
+    },
     reliefShade: 0.34,
     atmoColor: 0xc9bda4, atmoInt: 0.0, atmoPower: 3.0,
     bloomStrength: 0.0, bloomRadius: 0.4, bloomThreshold: 1.0,

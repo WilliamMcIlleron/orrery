@@ -220,6 +220,89 @@ export class Audio {
     src.stop(t + len);
   }
 
+  /**
+   * Leaving the ground.
+   *
+   * A short rising blip with a tiny noise transient. Jump and impact used to
+   * fire literally the same call, so pushing off sounded exactly like hitting
+   * something — the two moments in the piece that most need to feel opposite.
+   */
+  jump() {
+    if (!this.ready || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(190, t);
+    // Rising, and fast. A slow sweep sounds like a cartoon.
+    osc.frequency.exponentialRampToValueAtTime(430, t + 0.11);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.16, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+
+    osc.connect(g).connect(this._master);
+    osc.start(t);
+    osc.stop(t + 0.25);
+  }
+
+  /**
+   * Coming back down.
+   *
+   * A knock with a body under it, so a landing is distinguishable from
+   * clipping a rock at the same speed.
+   */
+  land(strength) {
+    if (!this.ready || this.muted) return;
+    this.knock(strength * 0.85);
+
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const amp = Math.min(1, strength / 14);
+    if (amp < 0.12) return;
+
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(120 + amp * 40, t);
+    osc.frequency.exponentialRampToValueAtTime(58, t + 0.16);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(amp * 0.3, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+
+    osc.connect(g).connect(this._master);
+    osc.start(t);
+    osc.stop(t + 0.33);
+  }
+
+  /**
+   * Crossing into a monument's ring.
+   *
+   * Deliberately tiny. It confirms the boundary you just crossed without
+   * competing with the chime that follows a moment later.
+   */
+  threshold() {
+    if (!this.ready || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = 1180;
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+
+    osc.connect(g).connect(this._master);
+    osc.start(t);
+    osc.stop(t + 0.16);
+  }
+
   /** One note per monument, climbing. `index` is 0-based. */
   chime(index) {
     if (!this.ready || this.muted) return;

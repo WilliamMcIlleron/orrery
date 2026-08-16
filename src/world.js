@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { R, RELIEF, WORLD_SEED, TOUCH_RANGE } from "./config.js";
 import { addSurfaceNoise, makeSweep } from "./surface.js";
 import { mulberry32 } from "./rng.js";
-import { terrain, surface } from "./geometry.js";
+import { terrain, surface, closestOnSegment } from "./geometry.js";
 
 /**
  * Builds the planet, its furniture and its lighting into `scene`.
@@ -379,6 +379,58 @@ export function buildWorld(scene, P, content) {
     scene.add(m);
     capsules.push({ a: c.clone(), b: c.clone(), r: rad });
     placed.push({ pos: c, clearance: rad });
+  }
+
+  /*
+   * Bake ambient occlusion into the vertex colours the height tint already uses.
+   *
+   * The shadow map only darkens ground the sun reaches, and half this planet
+   * has no sun at all — in Riso the key is a flat white light that produces
+   * almost no shading anywhere. Ambient occlusion is what actually welds an
+   * object to the ground it is standing on, and here it is nearly free: every
+   * occluder is already a capsule with a known radius, and the planet already
+   * carries a per-vertex colour that nothing else competes for.
+   *
+   * Because it lives in the vertex colour, the dawn sweep and the palette both
+   * still recolour the ground underneath it with no extra work.
+   */
+  {
+    const pos = planetGeo.attributes.position;
+    const nrm = planetGeo.attributes.normal;
+    const col = planetGeo.attributes.color;
+    const v = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    const cp = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      n.fromBufferAttribute(nrm, i);
+      let ao = 1;
+
+      for (let j = 0; j < capsules.length; j++) {
+        const c = capsules[j];
+        // Generous falloff. Tight to the occluder's own radius makes the
+        // result read as a painted circle rather than as occlusion.
+        const reach = c.r * 3.6;
+        closestOnSegment(c.a, c.b, v, cp);
+        dir.subVectors(cp, v);
+        const d = dir.length();
+        if (d >= reach || d < 1e-5) continue;
+
+        // Falls off with distance, and only counts where the occluder is
+        // actually above the surface — otherwise vertices on the far side of
+        // a rock darken as much as those beneath it.
+        const fall = 1 - d / reach;
+        const facing = Math.max(0, dir.divideScalar(d).dot(n));
+        ao *= 1 - 0.62 * fall * fall * facing;
+      }
+
+      if (ao < 1) {
+        col.setXYZ(i, col.getX(i) * ao, col.getY(i) * ao, col.getZ(i) * ao);
+      }
+    }
+    col.needsUpdate = true;
   }
 
   return {

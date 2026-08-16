@@ -158,6 +158,7 @@ function renderProgress(lit, total) {
 const wayfinder = new Wayfinder(document.getElementById("wayfinder"), camera);
 
 const progression = new Progression(monuments, {
+  onApproach: () => audio.threshold(),
   onLight: (index, lit, total) => {
     audio.chime(lit - 1);
     renderProgress(lit, total);
@@ -445,12 +446,15 @@ function frame(now) {
 
   if (marble.jumped) {
     marble.jumped = false;
-    audio.knock(4.5);
+    audio.jump();
   }
   audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded);
   const hit = marble.takeImpact();
   if (hit) {
-    audio.knock(hit);
+    // A landing has a body under the knock; a rock does not.
+    if (marble.landed) audio.land(hit);
+    else audio.knock(hit);
+    marble.landed = false;
     marble.squashOnLanding(hit);
     // Only genuinely hard landings freeze. Every knock doing it would make
     // ordinary rolling feel like the framerate is broken.

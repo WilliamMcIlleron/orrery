@@ -11,9 +11,10 @@ import { TOUCH_RANGE, LIGHT_RISE, DAWN_SECONDS, DAWN_HOLD } from "./config.js";
  * it is the difference between a demo and something someone finishes.
  */
 export class Progression {
-  constructor(monuments, { onLight, onComplete } = {}) {
+  constructor(monuments, { onLight, onComplete, onApproach } = {}) {
     this.monuments = monuments;
     this.onLight = onLight ?? (() => {});
+    this.onApproach = onApproach ?? (() => {});
     this.onComplete = onComplete ?? (() => {});
     this.litCount = 0;
     this.complete = false;
@@ -34,7 +35,16 @@ export class Progression {
     for (let i = 0; i < this.monuments.length; i++) {
       const m = this.monuments[i];
       if (m.lit) continue;
-      if (marblePos.distanceTo(m.base) > TOUCH_RANGE) continue;
+
+      const d = marblePos.distanceTo(m.base);
+
+      // The approach band, just outside the ring. Fires once per entry so
+      // crossing the boundary is confirmed before anything else happens.
+      const near = d < TOUCH_RANGE * 1.5;
+      if (near && !m._near) this.onApproach(i);
+      m._near = near;
+
+      if (d > TOUCH_RANGE) continue;
       m.lit = true;
       this.litCount++;
       this.onLight(i, this.litCount, this.total);

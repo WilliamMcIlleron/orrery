@@ -16,12 +16,18 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
  * sky, an unlit hemisphere — band into visible steps at 8 bits per channel.
  * A tiny amount of noise dithers the boundary away.
  */
-const VignetteGrainShader = {
+const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    uAmount: { value: 0.5 },
-    uGrain: { value: 0.035 },
+    uVignette: { value: 0.5 },
+    uGrain: { value: 0.03 },
     uTime: { value: 0 },
+    uLift: { value: new THREE.Vector3(0, 0, 0) },
+    uGamma: { value: new THREE.Vector3(1, 1, 1) },
+    uGain: { value: new THREE.Vector3(1, 1, 1) },
+    uSplitShadow: { value: new THREE.Vector3(1, 1, 1) },
+    uSplitHigh: { value: new THREE.Vector3(1, 1, 1) },
+    uSplitAmount: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -32,9 +38,15 @@ const VignetteGrainShader = {
   `,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float uAmount;
+    uniform float uVignette;
     uniform float uGrain;
     uniform float uTime;
+    uniform vec3 uLift;
+    uniform vec3 uGamma;
+    uniform vec3 uGain;
+    uniform vec3 uSplitShadow;
+    uniform vec3 uSplitHigh;
+    uniform float uSplitAmount;
     varying vec2 vUv;
 
     float hash(vec2 p) {
@@ -42,18 +54,41 @@ const VignetteGrainShader = {
     }
 
     void main() {
-      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
 
+      // Lift / gamma / gain, the standard three-way grade. Lift moves the
+      // black point, gain the white point, gamma everything between — which
+      // is the only one of the three that can shift midtones without
+      // crushing or blowing the ends.
+      c = uGain * (c + uLift);
+      c = pow(max(c, 0.0), 1.0 / uGamma);
+
+      // Split toning: push shadows and highlights in opposite hue directions.
+      // This is most of what separates a graded image from a tinted one — a
+      // single tint moves everything together and just looks like a filter.
+      float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      vec3 tint = mix(uSplitShadow, uSplitHigh, smoothstep(0.15, 0.85, lum));
+      c = mix(c, c * tint, uSplitAmount);
+
+      // Vignette. Squared radius, smoothstepped, so there is no hard edge.
       vec2 d = vUv - 0.5;
-      // Squared radius, smoothstepped: no hard edge to the darkening.
-      float r = dot(d, d);
-      float vig = 1.0 - uAmount * smoothstep(0.12, 0.72, r);
-      c.rgb *= vig;
+      c *= 1.0 - uVignette * smoothstep(0.12, 0.72, dot(d, d));
 
-      float g = hash(vUv * 1024.0 + uTime) - 0.5;
-      c.rgb += g * uGrain;
+      /*
+       * Triangular-PDF dither, not flat noise.
+       *
+       * Subtracting two uniform samples gives a triangular distribution, which
+       * decorrelates the quantisation error from the signal instead of merely
+       * hiding it. That is the difference between banding you cannot see and
+       * banding you can see through a haze — and this scene is mostly large
+       * smooth gradients across a sky, which is exactly where 8-bit banding
+       * shows up worst.
+       */
+      float n1 = hash(vUv * 1024.0 + uTime);
+      float n2 = hash(vUv * 1024.0 + uTime + 17.0);
+      c += (n1 - n2) * uGrain;
 
-      gl_FragColor = c;
+      gl_FragColor = vec4(c, 1.0);
     }
   `,
 };
@@ -89,9 +124,9 @@ export class Post {
 
     this.composer.addPass(new OutputPass());
 
-    this.vignette = new ShaderPass(VignetteGrainShader);
-    this.vignette.uniforms.uAmount.value = P.vignette ?? 0.5;
-    this.composer.addPass(this.vignette);
+    this.grade = new ShaderPass(GradeShader);
+    this.composer.addPass(this.grade);
+    this.applyGrade(P);
 
     this.setSize(innerWidth, innerHeight);
   }
@@ -107,8 +142,22 @@ export class Post {
     if (this.bloom) this.bloom.setSize(w / 2, h / 2);
   }
 
+  /** Pull grading values off a palette. Defaults are a no-op identity grade. */
+  applyGrade(P) {
+    const g = P.grade ?? {};
+    const u = this.grade.uniforms;
+    u.uVignette.value = g.vignette ?? 0.5;
+    u.uGrain.value = g.grain ?? 0.03;
+    u.uLift.value.fromArray(g.lift ?? [0, 0, 0]);
+    u.uGamma.value.fromArray(g.gamma ?? [1, 1, 1]);
+    u.uGain.value.fromArray(g.gain ?? [1, 1, 1]);
+    u.uSplitShadow.value.fromArray(g.splitShadow ?? [1, 1, 1]);
+    u.uSplitHigh.value.fromArray(g.splitHigh ?? [1, 1, 1]);
+    u.uSplitAmount.value = g.splitAmount ?? 0;
+  }
+
   render(elapsed) {
-    this.vignette.uniforms.uTime.value = elapsed;
+    this.grade.uniforms.uTime.value = elapsed;
     this.composer.render();
   }
 }
