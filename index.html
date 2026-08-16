@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Orrery — a small world you roll around</title>
+<meta name="description" content="A hand-built planet you can roll a marble around, in the browser. No physics engine, no models, no build step.">
+<meta name="color-scheme" content="dark light">
+
+<meta property="og:title" content="Orrery">
+<meta property="og:description" content="A small world you roll around, in the browser.">
+<meta property="og:type" content="website">
+
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='18' r='11' fill='%2353706a'/><circle cx='11' cy='11' r='3' fill='%23f2f6ff'/></svg>">
+</head>
+<body>
+
+<h1 class="sr-only">Orrery</h1>
+<p class="sr-only">
+  An interactive 3D world. A marble rolls around the surface of a small planet
+  where gravity always points at its centre, so you cannot fall off. Use the
+  arrow keys or W, A, S and D to roll, or drag anywhere on a touch screen.
+  Four monuments stand on the surface, each naming a project; rolling close to
+  one shows its name.
+</p>
+
+<div id="loading">loading…</div>
+
+<div id="nowebgl">
+  <p>
+    This page needs WebGL, and your browser has it switched off or unavailable.<br>
+    Everything else on the site works without it.
+  </p>
+</div>
+
+<div id="hud">booting…</div>
+<div id="marker"></div>
+<div id="stick"><div class="base"></div><div class="knob"></div></div>
+<p id="hint">WASD / arrows &nbsp;·&nbsp; or drag anywhere to roll</p>
+
+<nav id="pal" aria-label="Colour palette">
+  <button type="button" data-p="playground">Playground</button>
+  <button type="button" data-p="deepfield">Deep field</button>
+  <button type="button" data-p="dusk">Dusk</button>
+  <button type="button" data-p="riso">Riso</button>
+</nav>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"
+  }
+}
+</script>
+
+<script>
+  // Fail politely rather than showing a black rectangle forever.
+  (function () {
+    try {
+      var c = document.createElement("canvas");
+      if (c.getContext("webgl2") || c.getContext("webgl")) return;
+    } catch (e) { /* fall through */ }
+    document.getElementById("loading").remove();
+    document.getElementById("nowebgl").style.display = "grid";
+  })();
+</script>
+
+<script type="module" src="src/main.js"></script>
+
+</body>
+</html>
