@@ -21,13 +21,15 @@ export class Progression {
     /** Dawn progress, 0 to 1. Drives the palette interpolation. */
     this.dawn = 0;
     this._holdLeft = DAWN_HOLD;
+    this._clock = 0;
   }
 
   get total() {
     return this.monuments.length;
   }
 
-  update(marblePos, dt) {
+  update(marblePos, dt, reducedMotion = false) {
+    this._clock += dt;
     // --- contact ---
     for (let i = 0; i < this.monuments.length; i++) {
       const m = this.monuments[i];
@@ -56,6 +58,21 @@ export class Progression {
       // The beam overshoots hard and settles low: it should punch on ignition
       // and then sit there as a landmark rather than shouting permanently.
       if (m.beamMat) m.beamMat.uniforms.uOpacity.value = m.t * 0.42 * flare;
+
+      if (m.ringMat) {
+        if (m.lit) {
+          // Once lit the ring has done its job. It stays as a faint trace so
+          // the place still reads as marked, but it stops asking for attention.
+          m.ringMat.opacity = 0.34 + m.t * (0.55 * flare - 0.24);
+        } else {
+          // A slow pulse. This is the only thing in the world that moves on its
+          // own, which is why reduced motion holds it still rather than hiding
+          // it — the ring is information, the breathing is decoration.
+          m.ringMat.opacity = reducedMotion
+            ? 0.34
+            : 0.26 + Math.sin(this._clock * 1.7) * 0.11;
+        }
+      }
     }
 
     // --- dawn ---

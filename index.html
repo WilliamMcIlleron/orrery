@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Orrery — a small world you roll around</title>
 <meta name="description" content="A hand-built planet you can roll a marble around, in the browser. No physics engine, no models, no build step.">
 <meta name="color-scheme" content="dark light">
@@ -20,30 +20,39 @@
 <p class="sr-only">
   An interactive 3D world. A marble rolls around the surface of a small planet
   where gravity always points at its centre, so you cannot fall off. Use the
-  arrow keys or W, A, S and D to roll, or drag anywhere on a touch screen.
-  Four unlit monuments stand on the surface, each naming a project. Rolling
-  into one lights it and sounds a note; lighting all four breaks dawn over the
-  whole planet. Progress is announced as each one lights.
+  arrow keys or W, A, S and D to roll, space to jump, or drag anywhere on a
+  touch screen. Four unlit monuments stand on the surface, each naming a
+  project, and each marked by a ring on the ground. Roll inside a ring to light
+  that monument and sound a note; lighting all four breaks dawn over the whole
+  planet. A lit monument's marker becomes a link to the project it names.
 </p>
 
-<div id="loading">loading…</div>
+<div id="loading"><span class="spinner"></span></div>
 
 <div id="nowebgl">
-  <p>
-    This page needs WebGL, and your browser has it switched off or unavailable.<br>
-    Everything else on the site works without it.
-  </p>
+  <div>
+    <p><strong>This page needs WebGL</strong></p>
+    <p>Your browser has it switched off or unavailable. Everything else on the site works without it.</p>
+  </div>
 </div>
 
 <!-- Debug readout. Hidden unless ?dev — a framerate counter in the corner is
      most of what makes a finished piece read as somebody's test build. -->
-<div id="hud" hidden>booting…</div>
+<pre id="hud" hidden>booting…</pre>
+
+<header id="brand" aria-hidden="true">
+  <span class="mark"></span>
+  <span class="word">orrery</span>
+</header>
+
+<div id="progress" role="group" aria-label="Monuments lit"></div>
 
 <div id="intro">
   <div class="card">
-    <h2>Orrery</h2>
-    <p>A small world. Gravity points at its centre, so there is no edge to fall off.</p>
-    <p class="go">drag anywhere, or use the arrow keys</p>
+    <p class="eyebrow">an interactive world</p>
+    <h2>orrery</h2>
+    <p class="lede">Gravity points at the centre, so there is no edge to fall off. Four monuments stand unlit.</p>
+    <p class="go"><span>drag to roll</span></p>
   </div>
 </div>
 
@@ -51,17 +60,22 @@
 <div id="wayfinder" role="status" aria-live="off"><span></span></div>
 <div id="stick"><div class="base"></div><div class="knob"></div></div>
 
-<output id="progress" aria-live="polite" aria-label="0 of 4 monuments lit"></output>
+<p id="hint">roll inside a ring to light it</p>
 
-<p id="hint">roll into all four monuments to light them</p>
+<div id="controls">
+  <nav id="pal" aria-label="Colour palette">
+    <span class="seg-bg" aria-hidden="true"></span>
+    <button type="button" data-p="playground"><span>Playground</span></button>
+    <button type="button" data-p="deepfield"><span>Deep field</span></button>
+    <button type="button" data-p="dusk"><span>Dusk</span></button>
+    <button type="button" data-p="riso"><span>Riso</span></button>
+  </nav>
+  <button type="button" id="mute" class="icon-btn" aria-pressed="false" aria-label="Mute sound" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="wave2" d="M19 6a8.5 8.5 0 0 1 0 12"/><path class="slash" d="M4 20 20 4"/></svg>
+  </button>
+</div>
 
-<nav id="pal" aria-label="Colour palette">
-  <button type="button" data-p="playground">Playground</button>
-  <button type="button" data-p="deepfield">Deep field</button>
-  <button type="button" data-p="dusk">Dusk</button>
-  <button type="button" data-p="riso">Riso</button>
-  <button type="button" id="mute" aria-pressed="false" hidden>sound on</button>
-</nav>
+<button type="button" id="jump" aria-label="Jump"><span>jump</span></button>
 
 <script type="importmap">
 {

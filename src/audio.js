@@ -54,29 +54,42 @@ export class Audio {
        A looping buffer of white noise, run through a lowpass. Speed opens the
        filter and raises the gain, so faster reads as brighter and louder
        rather than merely louder — which is what a real rolling object does. */
-    const seconds = 2;
+    const seconds = 3;
     const buf = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
     const data = buf.getChannelData(0);
     let b0 = 0;
     for (let i = 0; i < data.length; i++) {
-      // Lightly integrated noise — closer to brown than white, so it reads as
-      // a rumble rather than a hiss.
-      b0 = (b0 + 0.02 * (Math.random() * 2 - 1)) / 1.02;
-      data[i] = b0 * 12;
+      // Heavily integrated noise. The first version used a light integration
+      // and opened the filter to 1.6kHz, which is a recipe for wind: on a
+      // phone speaker the low end simply is not reproduced, so all that
+      // reached the listener was the hiss.
+      b0 = (b0 + 0.008 * (Math.random() * 2 - 1)) / 1.008;
+      data[i] = b0 * 26;
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.loop = true;
+    // Detune the loop slightly off unity so the 3-second seam does not land on
+    // a predictable beat.
+    src.playbackRate.value = 0.87;
+
+    // Cut the sub. Below ~110Hz a phone reproduces nothing but cone flap, and
+    // on headphones it just muddies everything above it.
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 115;
 
     this._rollFilter = ctx.createBiquadFilter();
     this._rollFilter.type = "lowpass";
-    this._rollFilter.frequency.value = 200;
-    this._rollFilter.Q.value = 0.7;
+    this._rollFilter.frequency.value = 160;
+    // A little resonance gives the noise a centre to sit on, so it reads as an
+    // object with a size rather than as broadband hiss.
+    this._rollFilter.Q.value = 1.7;
 
     this._rollGain = ctx.createGain();
     this._rollGain.gain.value = 0;
 
-    src.connect(this._rollFilter).connect(this._rollGain).connect(this._master);
+    src.connect(hp).connect(this._rollFilter).connect(this._rollGain).connect(this._master);
     src.start();
 
     /* ---- dawn swell bus ---- */
@@ -105,8 +118,12 @@ export class Audio {
     const t = this.ctx.currentTime;
     const n = grounded ? Math.min(1, speed / maxSpeed) : 0;
     // Curved, not linear: a marble at half speed is much quieter than half.
-    this._rollGain.gain.setTargetAtTime(n * n * 0.5, t, 0.08);
-    this._rollFilter.frequency.setTargetAtTime(180 + n * 1500, t, 0.08);
+    // The ceiling is a third of what it was — this is a bed the other sounds
+    // sit on, and it was loud enough to be the main event.
+    this._rollGain.gain.setTargetAtTime(n * n * 0.17, t, 0.09);
+    // Tops out under 700Hz. Above that it stops sounding like a heavy object
+    // on stone and starts sounding like static.
+    this._rollFilter.frequency.setTargetAtTime(150 + n * 520, t, 0.09);
   }
 
   /**

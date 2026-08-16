@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import {
   R_COL, BALL_R, GRAVITY, ACCEL, AIR_ACCEL,
-  DRAG, ROLL_FRIC, BOUNCE, MAX_SPEED,
+  DRAG, ROLL_FRIC, BOUNCE, MAX_SPEED, JUMP_SPEED, COYOTE_TIME,
 } from "./config.js";
-import { orthonormalise, closestOnSegment } from "./geometry.js";
+import { orthonormalise, closestOnSegment, groundRadius, groundNormal } from "./geometry.js";
 
 // Module-scope scratch vectors. Allocating inside the step would produce a few
 // hundred short-lived Vector3s a second and hand the GC a reason to stutter.
@@ -14,6 +14,8 @@ const _n = new THREE.Vector3();
 const _cp = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _gn = new THREE.Vector3();
+const _rad = new THREE.Vector3();
 
 /**
  * The marble, and all of its physics.
@@ -44,6 +46,9 @@ export class Marble {
     // Spawn above the north pole and let it fall in. Cheaper than a scripted
     // intro and it demonstrates gravity in the first half second.
     this.pos = new THREE.Vector3(0, R_COL + BALL_R + 6, 0);
+
+    /** Live surface normal under the marble. Radial while airborne. */
+    this.groundN = new THREE.Vector3(0, 1, 0);
     this.vel = new THREE.Vector3();
     this.grounded = false;
 
@@ -55,6 +60,17 @@ export class Marble {
      * machine-gun. The loudest one is the one you would actually hear.
      */
     this.impact = 0;
+
+    /** Seconds since last touching the ground. Drives coyote time. */
+    this.airborneFor = 0;
+
+    /** Set by the input layer; consumed on the next grounded step. */
+    this.jumpQueued = false;
+  }
+
+  /** Request a jump. Buffered, so pressing slightly early still works. */
+  requestJump() {
+    this.jumpQueued = true;
   }
 
   /** Read and clear the accumulated impact. */
@@ -90,14 +106,28 @@ export class Marble {
       vel.addScaledVector(camFwd, -input.y * a * dt);
     }
 
+    // Jump before gravity, so the full impulse survives this step.
+    if (this.jumpQueued && this.airborneFor <= COYOTE_TIME) {
+      this.jumpQueued = false;
+      this.airborneFor = COYOTE_TIME + 1; // no double jump off one contact
+      // Replace the vertical component rather than adding to it, or a jump
+      // taken while already rising off a bump goes absurdly high.
+      // Leave along the surface, so jumping off a slope carries you sideways
+      // the way it should rather than straight away from the core.
+      const nrm = this.grounded ? this.groundN : _up;
+      const vn = vel.dot(nrm);
+      vel.addScaledVector(nrm, JUMP_SPEED - vn);
+      this.jumped = true;
+    }
+
     vel.addScaledVector(_up, -GRAVITY * dt);
     vel.multiplyScalar(1 - DRAG * dt);
 
     if (this.grounded) {
-      // Rolling friction, applied only to the tangential component. Cut hard
-      // while steering, or holding a direction fights the friction and the
-      // marble feels like it is rolling through sand.
-      _vt.copy(vel).addScaledVector(_up, -vel.dot(_up));
+      // Rolling friction, applied only to the tangential component — measured
+      // against the contact normal, so friction on a slope acts along the
+      // slope rather than across it.
+      _vt.copy(vel).addScaledVector(this.groundN, -vel.dot(this.groundN));
       vel.addScaledVector(_vt, -ROLL_FRIC * dt * (input.x || input.y ? 0.35 : 1.0));
     }
 
@@ -106,28 +136,50 @@ export class Marble {
 
     pos.addScaledVector(vel, dt);
 
+    this.airborneFor += dt;
     this._collidePlanet();
     this._collideCapsules(capsules);
     this._roll(dt);
   }
 
+  /*
+   * Collision against the actual displaced ground.
+   *
+   * This used to test against a fixed sphere at the midpoint of the relief,
+   * which meant the marble hovered up to RELIEF/2 + a bit above every hollow —
+   * visibly floating over ground it was supposed to be resting on — and the
+   * hills it rolled through were not there at all.
+   *
+   * The terrain is an analytic function, so the exact ground height under any
+   * point is one evaluation away. There is no reason to approximate it.
+   */
   _collidePlanet() {
     const { pos, vel } = this;
     this.grounded = false;
+
+    _rad.copy(pos).normalize();
+    const minD = groundRadius(_rad) + BALL_R;
     const dist = pos.length();
-    const minD = R_COL + BALL_R;
     if (dist >= minD) return;
 
-    _up.copy(pos).divideScalar(dist);
-    pos.copy(_up).multiplyScalar(minD);
-    const vn = vel.dot(_up);
+    // The real normal, not the radial one. Using radial on a slope is why a
+    // marble would sit on a hillside instead of rolling off it.
+    groundNormal(pos, _gn);
+    this.groundN.copy(_gn);
+
+    // Penetration is measured radially; push out along the normal. On slopes
+    // this shallow the two differ by well under a percent.
+    pos.addScaledVector(_gn, minD - dist);
+
+    const vn = vel.dot(_gn);
     if (vn < 0) {
       // Only landings count, not the constant micro-contact of resting on the
       // ground. Below this the marble is simply in contact, not hitting.
       if (-vn > 2.5 && -vn > this.impact) this.impact = -vn;
-      vel.addScaledVector(_up, -vn * (1 + BOUNCE));
+      vel.addScaledVector(_gn, -vn * (1 + BOUNCE));
     }
     this.grounded = true;
+    this.airborneFor = 0;
   }
 
   _collideCapsules(capsules) {
@@ -158,8 +210,9 @@ export class Marble {
    * puck and the whole thing reads as fake, whatever else is right.
    */
   _roll(dt) {
-    const { pos, vel } = this;
-    _up.copy(pos).normalize();
+    const { vel } = this;
+    // Spin about the contact normal while grounded, radial while airborne.
+    _up.copy(this.grounded ? this.groundN : this.pos).normalize();
     _vt.copy(vel).addScaledVector(_up, -vel.dot(_up));
     const vtl = _vt.length();
     if (vtl <= 1e-4) return;

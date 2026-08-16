@@ -67,7 +67,13 @@ applyPaletteState(scene, renderer, handles, paletteState);
   root.setProperty("--ink-soft", light ? "#6f6858" : "#7c8394");
   root.setProperty("--ink-done", light ? "#a8631a" : "#ffd9a8");
   root.setProperty("--ink-shadow", light ? "0 1px 3px rgba(255,255,255,.75)" : "0 1px 4px rgba(0,0,0,.9)");
-  root.setProperty("--scrim", light ? "rgba(246,242,232,.88)" : "rgba(6,8,14,.84)");
+  root.setProperty("--scrim", light ? "rgba(246,242,232,.90)" : "rgba(6,8,14,.86)");
+  // What sits on top of the active segment pill, which is painted in --ink.
+  root.setProperty("--scrim-ink", light ? "#f6f2e8" : "#11141a");
+  root.setProperty("--glass", light ? "rgba(255,253,247,.55)" : "rgba(16,20,28,.5)");
+  root.setProperty("--glass-line", light ? "rgba(58,54,48,.16)" : "rgba(255,255,255,.14)");
+  root.setProperty("--glass-hi", light ? "rgba(255,255,255,.6)" : "rgba(255,255,255,.07)");
+  root.setProperty("--focus", light ? "#2f5d7c" : "#8ab4ff");
 }
 
 /* ------------------------------------------------------------------- audio */
@@ -87,7 +93,7 @@ if (muteBtn) {
     const next = !audio.muted;
     audio.setMuted(next);
     muteBtn.setAttribute("aria-pressed", String(next));
-    muteBtn.textContent = next ? "sound off" : "sound on";
+    muteBtn.setAttribute("aria-label", next ? "Unmute sound" : "Mute sound");
   });
 }
 
@@ -96,11 +102,28 @@ if (muteBtn) {
 const progressEl = document.getElementById("progress");
 const hintEl = document.getElementById("hint");
 
+/*
+ * A row of pips, not a fraction. "2 / 4" reads as a task to complete; pips
+ * read as something you are in the middle of.
+ *
+ * Each pip carries its monument's own accent colour, so the row doubles as a
+ * legend: the gold one you just lit is the gold beam on the horizon.
+ */
+function buildProgress(total) {
+  if (!progressEl) return;
+  progressEl.textContent = "";
+  for (let i = 0; i < total; i++) {
+    const pip = document.createElement("span");
+    pip.className = "pip";
+    pip.style.color = `#${monuments[i].colour.toString(16).padStart(6, "0")}`;
+    progressEl.appendChild(pip);
+  }
+}
+
 function renderProgress(lit, total) {
   if (!progressEl) return;
-  // A row of dots, not a number. "2 / 4" reads as a task; four dots with two
-  // filled reads as something you are in the middle of.
-  progressEl.textContent = "●".repeat(lit) + "○".repeat(total - lit);
+  const pips = progressEl.children;
+  for (let i = 0; i < pips.length; i++) pips[i].classList.toggle("on", i < lit);
   progressEl.setAttribute("aria-label", `${lit} of ${total} monuments lit`);
 }
 
@@ -121,6 +144,7 @@ const progression = new Progression(monuments, {
     }
   },
 });
+buildProgress(progression.total);
 renderProgress(0, progression.total);
 
 const introEl = document.getElementById("intro");
@@ -135,6 +159,34 @@ function dismissIntro() {
 // minute later — the world is the point, and the card has said its piece.
 setTimeout(dismissIntro, 9000);
 
+/* -------------------------------------------------------------------- jump */
+
+const jumpBtn = document.getElementById("jump");
+
+function doJump() {
+  marble.requestJump();
+  ensureAudio();
+  dismissIntro();
+  if (hintEl) hintEl.style.opacity = "0";
+}
+
+addEventListener("keydown", (e) => {
+  if (e.code !== "Space") return;
+  // Space scrolls the page by default, and on a fixed-height body that is a
+  // silent no-op that eats the keypress.
+  e.preventDefault();
+  if (!e.repeat) doJump();
+}, { passive: false });
+
+if (jumpBtn) {
+  // pointerdown, not click: a jump that waits for the finger to lift is a
+  // jump that happens after you needed it.
+  jumpBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    doJump();
+  });
+}
+
 const input = new Input(renderer.domElement, document.getElementById("stick"));
 input.onFirstUse = () => {
   ensureAudio();
@@ -148,6 +200,18 @@ input.onFirstUse = () => {
 
 const palBar = document.getElementById("pal");
 if (palBar) {
+  const segBg = palBar.querySelector(".seg-bg");
+
+  // Park the sliding pill under the active button. Measured rather than
+  // hardcoded, because the labels are different widths and the breakpoint
+  // changes the padding.
+  function placeSeg() {
+    const active = palBar.querySelector('button[aria-pressed="true"]');
+    if (!active || !segBg) return;
+    segBg.style.width = `${active.offsetWidth}px`;
+    segBg.style.transform = `translateX(${active.offsetLeft}px)`;
+  }
+
   for (const btn of palBar.querySelectorAll("button[data-p]")) {
     btn.setAttribute("aria-pressed", String(btn.dataset.p === paletteKey));
     btn.addEventListener("click", () => {
@@ -158,6 +222,11 @@ if (palBar) {
       location.reload();
     });
   }
+
+  placeSeg();
+  addEventListener("resize", placeSeg);
+  // Fonts land after first paint and change the measured widths.
+  if (document.fonts?.ready) document.fonts.ready.then(placeSeg);
 }
 addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() !== "p") return;
@@ -259,6 +328,7 @@ addEventListener("keydown", (e) => {
 /* -------------------------------------------------------------------- loop */
 
 const DEV = location.search.includes("dev");
+const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const hudEl = DEV ? document.getElementById("hud") : null;
 if (hudEl) hudEl.hidden = false;
 let accumulator = 0;
@@ -294,7 +364,7 @@ function frame(now) {
     lamp.position.copy(marble.pos).multiplyScalar((d + 4.2) / d);
   }
 
-  progression.update(marble.pos, wall);
+  progression.update(marble.pos, wall, REDUCED_MOTION);
   wayfinder.update(monuments, marble.pos, wall);
 
   // Only touch the scene while dawn is actually moving. Once it has landed
@@ -303,12 +373,15 @@ function frame(now) {
   if (dawn !== lastDawn) {
     applyDawn(paletteState, P, dawn);
     applyPaletteState(scene, renderer, handles, paletteState);
-    atmosphere.uniforms.uColor.value.copy(paletteState.atmoColor);
-    atmosphere.uniforms.uIntensity.value = paletteState.atmoInt;
+    atmosphere.set(paletteState.atmoColor, paletteState.atmoInt);
     post.setBloomStrength(paletteState.bloomStrength);
     lastDawn = dawn;
   }
 
+  if (marble.jumped) {
+    marble.jumped = false;
+    audio.knock(4.5);
+  }
   audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded);
   const hit = marble.takeImpact();
   if (hit) audio.knock(hit);

@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { R, RELIEF, WORLD_SEED } from "./config.js";
+import { R, RELIEF, WORLD_SEED, TOUCH_RANGE } from "./config.js";
+import { addSurfaceNoise } from "./surface.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface } from "./geometry.js";
 
@@ -51,7 +52,7 @@ export function buildWorld(scene, P, content) {
     // Range and decay tuned so it lights the ground rather than the marble.
     // Sat too close, its own lamp turned the marble into the brightest thing
     // in the scene and bloom happily made it a fireball.
-    lamp = new THREE.PointLight(P.lamp, P.lampInt, 30, 1.6);
+    lamp = new THREE.PointLight(P.lamp, P.lampInt, 34, 1.5);
     scene.add(lamp);
   }
 
@@ -124,6 +125,10 @@ export function buildWorld(scene, P, content) {
     flatShading: true,
     vertexColors: true,
   });
+  // Grain and roughness variation, generated in the shader. Without it the
+  // ground is solid colour and every facet reads as paint.
+  addSurfaceNoise(planetMat, { scale: 0.34, colour: 0.19, rough: 0.5 });
+
   const planet = new THREE.Mesh(planetGeo, planetMat);
   planet.receiveShadow = true;
   scene.add(planet);
@@ -146,6 +151,7 @@ export function buildWorld(scene, P, content) {
     roughness: 0.7,
     metalness: 0.05,
   });
+  addSurfaceNoise(monumentMat, { scale: 1.1, colour: 0.14, rough: 0.35 });
 
   content.forEach((item, i) => {
     const base = surface(item.lat, item.lon);
@@ -194,6 +200,39 @@ export function buildWorld(scene, P, content) {
     collar.position.copy(base).addScaledVector(up, h * 0.755);
     collar.quaternion.setFromUnitVectors(UP_Z, up);
     scene.add(collar);
+
+    /*
+     * The activation ring.
+     *
+     * Drawn on the ground at exactly TOUCH_RANGE, so the thing you are aiming
+     * at is a circle you can see rather than a post you have to hit. Before
+     * this, reaching a monument meant driving into a pillar and glancing past
+     * at speed did nothing — a precision task in a piece that is not about
+     * precision.
+     *
+     * It breathes slowly while unlit, which is the only self-animating thing
+     * in the world and the reason `prefers-reduced-motion` is honoured by
+     * holding it still rather than by disabling it.
+     */
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: colour,
+      transparent: true,
+      opacity: 0.34,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(TOUCH_RANGE, 0.085, 6, 90),
+      ringMat,
+    );
+    ring.position.copy(base);
+    // A flat disc tangent to a sphere lifts its own edge by r^2/2R. Sinking
+    // the centre by half that splits the error either side of the ground so
+    // the ring neither floats nor buries itself.
+    ring.position.addScaledVector(up, -(TOUCH_RANGE * TOUCH_RANGE) / (4 * R) + 0.06);
+    ring.quaternion.setFromUnitVectors(UP_Z, up);
+    ring.renderOrder = 1;
+    scene.add(ring);
 
     /*
      * A beam of light that fires when the monument lights.
@@ -268,6 +307,7 @@ export function buildWorld(scene, P, content) {
       colour,
       collarMat,
       beamMat,
+      ringMat,
       glow,
       lit: false,
       // Drives the light-up animation, 0 to 1.
@@ -282,6 +322,9 @@ export function buildWorld(scene, P, content) {
     metalness: 0.0,
     flatShading: true,
   });
+  // Higher frequency than the ground: rocks are smaller, so the same world
+  // scale would give each one a single flat sample and no variation at all.
+  addSurfaceNoise(rockMat, { scale: 0.85, colour: 0.26, rough: 0.4 });
 
   /*
    * Rejection sampling rather than pure random placement.

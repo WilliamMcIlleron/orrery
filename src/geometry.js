@@ -34,6 +34,65 @@ export function surface(latDeg, lonDeg) {
 }
 
 /**
+ * Distance from the planet's centre to the displaced ground beneath `n`.
+ *
+ * @param {THREE.Vector3} n unit vector
+ */
+export function groundRadius(n) {
+  return R + terrain(n.x, n.y, n.z) * RELIEF;
+}
+
+const _n = new THREE.Vector3();
+const _t1 = new THREE.Vector3();
+const _t2 = new THREE.Vector3();
+const _p0 = new THREE.Vector3();
+const _p1 = new THREE.Vector3();
+const _p2 = new THREE.Vector3();
+const _e1 = new THREE.Vector3();
+const _e2 = new THREE.Vector3();
+const _AXIS = new THREE.Vector3(0, 1, 0);
+const _AXIS2 = new THREE.Vector3(1, 0, 0);
+
+function displaced(n, out) {
+  return out.copy(n).multiplyScalar(groundRadius(n));
+}
+
+/**
+ * True surface normal of the displaced terrain under `pos`.
+ *
+ * The radial direction is *not* the normal once the ground has slopes, and
+ * using it anyway is why a marble on a hillside sits there instead of rolling
+ * off it. Three samples of the surface and one cross product gives the real
+ * one, for the cost of a handful of sines.
+ *
+ * Writes into `out` and returns it.
+ */
+export function groundNormal(pos, out) {
+  _n.copy(pos).normalize();
+
+  // Any two tangents will do. Pick the cross partner that is furthest from
+  // parallel so the basis never collapses at the poles.
+  const axis = Math.abs(_n.y) > 0.9 ? _AXIS2 : _AXIS;
+  _t1.crossVectors(_n, axis).normalize();
+  _t2.crossVectors(_n, _t1).normalize();
+
+  // ~0.9 units of arc at R=30. Small enough to be local, large enough that
+  // float error in the sine sum does not dominate the difference.
+  const eps = 0.03;
+  displaced(_n, _p0);
+  displaced(_e1.copy(_n).addScaledVector(_t1, eps).normalize(), _p1);
+  displaced(_e2.copy(_n).addScaledVector(_t2, eps).normalize(), _p2);
+
+  _e1.subVectors(_p1, _p0);
+  _e2.subVectors(_p2, _p0);
+  out.crossVectors(_e1, _e2).normalize();
+
+  // Winding depends on the tangent basis, so make it point outward.
+  if (out.dot(_n) < 0) out.negate();
+  return out;
+}
+
+/**
  * Project `v` onto the tangent plane at `up` and normalise it.
  *
  * This is the load-bearing function of the whole camera. "Up" changes

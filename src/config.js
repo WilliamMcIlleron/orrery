@@ -17,18 +17,25 @@ export const BALL_R = 0.85;
  *
  * Relief matters more than it looks like it should: on a perfectly smooth
  * sphere you cannot perceive your own speed, because nothing passes you.
+ *
+ * This was 0.6 while the collider was a fixed sphere, because anything larger
+ * made the marble visibly hover over hollows. Collision now follows the
+ * terrain exactly, so the hills can be hills — a little over three marble
+ * diameters from trough to crest, on wavelengths long enough to roll rather
+ * than rattle.
  */
-export const RELIEF = 0.6;
+export const RELIEF = 1.5;
 
 /**
- * Collision radius. Sits at the midpoint of the relief, so peaks poke through
- * the marble by at most RELIEF/2 and valleys read as filled.
+ * Spawn radius only.
  *
- * The mesh is displaced but the collider is a perfect sphere. At this
- * amplitude against a 0.85 marble the mismatch is invisible. Real heightfield
- * collision is a later problem and probably never worth it.
+ * The collider used to be a fixed sphere at the midpoint of the relief, which
+ * meant the marble floated above every hollow and rolled straight through
+ * every rise. Ground contact is now evaluated analytically per step — see
+ * groundRadius() and groundNormal() in geometry.js — and this constant
+ * survives purely to drop the marble in from above at startup.
  */
-export const R_COL = R + RELIEF * 0.5;
+export const R_COL = R + RELIEF;
 
 /** Constant, not inverse-square. On a world this small the falloff would be noise. */
 export const GRAVITY = 55;
@@ -71,13 +78,35 @@ export const WORLD_SEED = 20260816;
 export const LABEL_RANGE = 15;
 
 /**
- * How close counts as touching a monument.
+ * How close counts as reaching a monument.
  *
- * Contact physically happens at 2.0 (pillar radius 1.15 plus marble 0.85).
- * A little more than that so brushing past it counts — having to hit a pillar
- * dead on would be a precision test, and this is not one.
+ * Physical contact happens at 2.0 (pillar radius 1.15 plus marble 0.85), and
+ * requiring that made lighting one a precision task: you had to drive into a
+ * post, and glancing past at speed did nothing.
+ *
+ * It is now a generous zone drawn on the ground, so the target is the circle
+ * you can see rather than the pillar you have to hit. Rolling anywhere near
+ * counts, which is what the piece actually wants — reaching it is the point,
+ * not aiming at it.
  */
-export const TOUCH_RANGE = 2.9;
+export const TOUCH_RANGE = 5.2;
+
+/**
+ * Jump.
+ *
+ * The single biggest thing traversal was missing. Rolling was the only verb;
+ * now the terrain and the rocks are things you can clear, and hitting a
+ * boulder at speed launches you instead of just stopping you.
+ */
+export const JUMP_SPEED = 19;
+
+/**
+ * Grace period after leaving the ground where a jump still counts.
+ *
+ * Standard platformer courtesy. Without it, jumping off the crest of a rise
+ * fails about a third of the time and feels like the game ignoring you.
+ */
+export const COYOTE_TIME = 0.11;
 
 /** Seconds for a monument's light to rise once touched. */
 export const LIGHT_RISE = 0.8;
