@@ -57,6 +57,11 @@ export const BOUNCE = 0.3;
 export const MAX_SPEED = 13;
 
 /** Chase camera. */
+export const FOV_BASE = 62;
+
+/** Degrees of extra field of view at full speed. Subtle on purpose. */
+export const FOV_KICK = 9;
+
 export const CAM_BACK = 8.5;
 export const CAM_UP = 3.6;
 export const CAM_LAG = 6.0;

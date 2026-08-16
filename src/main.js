@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED } from "./config.js";
+import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE } from "./config.js";
 import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
@@ -21,7 +21,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(P.bg);
 scene.fog = new THREE.Fog(P.bg, P.fogNear, P.fogFar);
 
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 400);
+const camera = new THREE.PerspectiveCamera(FOV_BASE, innerWidth / innerHeight, 0.1, 400);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setSize(innerWidth, innerHeight);
@@ -386,7 +386,7 @@ function frame(now) {
   const hit = marble.takeImpact();
   if (hit) audio.knock(hit);
 
-  chase.update(marble.pos, marble.vel, wall);
+  chase.update(marble.pos, marble.vel, wall, marble.speed);
   updateMarker();
   post.render(now * 0.001);
 
@@ -411,6 +411,7 @@ function frame(now) {
 
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
+  // fov is owned by the chase camera; only aspect changes here.
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   post.setSize(innerWidth, innerHeight);

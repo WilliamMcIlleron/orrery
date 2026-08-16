@@ -53,7 +53,11 @@ export class Progression {
       // Overshoot on the way up so it flares and settles rather than simply
       // getting brighter. A linear fade reads as a value change, not an event.
       const flare = m.t < 1 ? 1 + Math.sin(m.t * Math.PI) * 1.6 : 1;
-      m.collarMat.emissiveIntensity = 0.35 + m.t * 1.5 * flare;
+      // Capped lower than it wants to be. Past roughly 1.3 the bloom washes
+      // the collar to white and the monument loses the accent colour that
+      // makes it identifiable from across the planet — which is the entire
+      // job of the collar.
+      m.collarMat.emissiveIntensity = 0.35 + m.t * 0.95 * flare;
       if (m.glow) m.glow.intensity = m.t * 11 * flare;
       // The beam overshoots hard and settles low: it should punch on ignition
       // and then sit there as a landmark rather than shouting permanently.

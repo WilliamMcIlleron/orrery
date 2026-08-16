@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CAM_BACK, CAM_UP, CAM_LAG, HEAD_LAG } from "./config.js";
+import { CAM_BACK, CAM_UP, CAM_LAG, HEAD_LAG, MAX_SPEED, FOV_BASE, FOV_KICK } from "./config.js";
 import { orthonormalise } from "./geometry.js";
 
 const _up = new THREE.Vector3();
@@ -30,14 +30,16 @@ export class ChaseCamera {
     this.forward = new THREE.Vector3(0, 0, -1);
     this.position = new THREE.Vector3();
     this._initialised = false;
+    this._fov = FOV_BASE;
   }
 
   /**
    * @param {THREE.Vector3} pos  marble position
    * @param {THREE.Vector3} vel  marble velocity
    * @param {number} dt          real elapsed seconds, not the fixed step
+   * @param {number} speed        current speed, for the fov kick
    */
-  update(pos, vel, dt) {
+  update(pos, vel, dt, speed = 0) {
     _up.copy(pos).normalize();
 
     // Swing the heading toward the direction of travel, but only once moving
@@ -50,10 +52,32 @@ export class ChaseCamera {
     }
     orthonormalise(this.forward, _up);
 
+    /*
+     * Speed does two things to the camera, and neither is the marble moving
+     * faster on screen.
+     *
+     * The field of view widens, which stretches the periphery and reads as
+     * acceleration — the effect every racing game uses and almost no one
+     * consciously notices. And the camera drops back, so the marble shrinks
+     * slightly and more of what is coming fits in frame.
+     *
+     * Both are squared, so they stay out of the way at a stroll and only
+     * arrive when you are genuinely moving. Both are smoothed frame-rate
+     * independently, because a fov that snaps is nauseating.
+     */
+    const sp = Math.min(1, speed / MAX_SPEED);
+    const kick = sp * sp;
+    const wantFov = FOV_BASE + kick * FOV_KICK;
+    this._fov += (wantFov - this._fov) * (1 - Math.exp(-3.2 * dt));
+    if (Math.abs(this.camera.fov - this._fov) > 0.01) {
+      this.camera.fov = this._fov;
+      this.camera.updateProjectionMatrix();
+    }
+
     _target
       .copy(pos)
-      .addScaledVector(_up, CAM_UP)
-      .addScaledVector(this.forward, -CAM_BACK);
+      .addScaledVector(_up, CAM_UP + kick * 0.7)
+      .addScaledVector(this.forward, -(CAM_BACK + kick * 1.6));
 
     if (!this._initialised) {
       this.position.copy(_target);
