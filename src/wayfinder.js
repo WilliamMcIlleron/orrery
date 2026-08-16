@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { WAYFINDER_DELAY, R } from "./config.js";
+import { WAYFINDER_DELAY } from "./config.js";
+import { seesOverHorizon } from "./geometry.js";
 
 const _p = new THREE.Vector3();
 
@@ -52,35 +53,10 @@ export class Wayfinder {
 
     if (!best || this.idle < WAYFINDER_DELAY) return this._hide();
 
-    /*
-     * Is it actually visible, or is the planet in the way?
-     *
-     * Projection has no idea the world is round: a monument fifty degrees over
-     * the horizon still lands inside the screen rectangle, so a naive
-     * on-screen test concludes you can see it while it is buried under a
-     * hemisphere of rock.
-     *
-     * The test usually quoted for this is dot(p, c) >= R². That one is wrong
-     * here, and quietly: it asks whether p is beyond the camera's horizon
-     * *plane*, which is only the right question when p sits on the surface.
-     * These monuments are six units tall, and height buys extra visibility
-     * over the curve — using the plane test hid pillars that were plainly on
-     * screen.
-     *
-     * The exact condition is that the angle between them is no more than the
-     * sum of their two horizon angles, acos(R/|c|) + acos(R/|p|). Expanding
-     * the cosine of that sum and multiplying through by |p||c| clears both the
-     * inverse cosines and the normalisation:
-     *
-     *     dot(p, c)  >=  R² - sqrt(|c|² - R²) · sqrt(|p|² - R²)
-     */
-    const R2 = R * R;
-    const cLen2 = this.camera.position.lengthSq();
-    const pLen2 = best.pos.lengthSq();
-    const horizon =
-      R2 -
-      Math.sqrt(Math.max(0, cLen2 - R2)) * Math.sqrt(Math.max(0, pLen2 - R2));
-    const overHorizon = best.pos.dot(this.camera.position) < horizon;
+    // Projection has no idea the world is round: a monument fifty degrees past
+    // the horizon still lands inside the screen rectangle. See geometry.js for
+    // why the usual dot(p, c) >= R2 test is wrong for anything with height.
+    const overHorizon = !seesOverHorizon(best.pos, this.camera.position);
 
     _p.copy(best.pos).project(this.camera);
     const behind = _p.z > 1;

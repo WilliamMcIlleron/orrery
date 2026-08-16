@@ -11,6 +11,7 @@ import { Audio } from "./audio.js";
 import { Wayfinder } from "./wayfinder.js";
 import { createAtmosphere } from "./atmosphere.js";
 import { Post } from "./postfx.js";
+import { Beacons } from "./beacons.js";
 
 const paletteKey = resolvePaletteKey();
 const P = PALETTES[paletteKey];
@@ -156,6 +157,19 @@ function renderProgress(lit, total) {
 }
 
 const wayfinder = new Wayfinder(document.getElementById("wayfinder"), camera);
+const beacons = new Beacons(document.getElementById("beacons"), camera, monuments);
+
+const clockEl = document.getElementById("clock");
+const againBtn = document.getElementById("again");
+
+/** Wall-clock ms at first input. The run is timed from when you took over. */
+let runStart = 0;
+
+if (againBtn) {
+  // Same palette, same seeded world, fresh run. Reload rather than a reset
+  // path: there is no second state to keep in sync and nothing to get wrong.
+  againBtn.addEventListener("click", () => location.reload());
+}
 
 const progression = new Progression(monuments, {
   onApproach: () => audio.threshold(),
@@ -165,6 +179,26 @@ const progression = new Progression(monuments, {
     wayfinder.reset();
   },
   onComplete: () => {
+    /*
+     * The ending hands the work over.
+     *
+     * Every lit monument grows a permanent label anchored to its pillar, so
+     * the planet finishes the piece covered in its own contents and the four
+     * links are reachable from anywhere instead of only by trekking back to
+     * each one. The run time appears once, under the pips.
+     *
+     * No modal, no menu, nothing to dismiss — the world stays playable, which
+     * is the whole reason someone would send the link on.
+     */
+    beacons.reveal();
+
+    if (clockEl && runStart) {
+      const secs = (performance.now() - runStart) / 1000;
+      clockEl.textContent = `${secs.toFixed(1)}s`;
+      clockEl.classList.add("on");
+    }
+    if (againBtn) againBtn.hidden = false;
+
     /*
      * Aim the terminator.
      *
@@ -214,6 +248,7 @@ setTimeout(dismissIntro, 9000);
 const jumpBtn = document.getElementById("jump");
 
 function doJump() {
+  if (!runStart) runStart = performance.now();
   marble.requestJump();
   ensureAudio();
   dismissIntro();
@@ -239,6 +274,7 @@ if (jumpBtn) {
 
 const input = new Input(renderer.domElement, document.getElementById("stick"));
 input.onFirstUse = () => {
+  runStart = performance.now();
   ensureAudio();
   if (hintEl) hintEl.style.opacity = "0";
   // The card is the first thing anyone sees, and it should leave the instant
@@ -315,6 +351,16 @@ function setMarker(m) {
 
 function updateMarker() {
   if (!markerEl) return;
+
+  // Once the beacons are up they label every monument permanently, so the
+  // proximity marker is showing a second card for the pillar you are already
+  // standing next to. Stand down.
+  if (beacons.active) {
+    markerEl.style.opacity = "0";
+    markerEl.classList.remove("shown");
+    focused = null;
+    return;
+  }
   let best = null;
   let bestD = LABEL_RANGE;
   for (const m of monuments) {
@@ -429,6 +475,7 @@ function frame(now) {
 
   progression.update(marble.pos, wall, REDUCED_MOTION);
   wayfinder.update(monuments, marble.pos, wall);
+  beacons.update();
 
   // Only touch the scene while dawn is actually moving. Once it has landed
   // this costs nothing for the rest of the session.

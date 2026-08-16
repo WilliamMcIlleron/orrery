@@ -93,6 +93,28 @@ export function groundNormal(pos, out) {
 }
 
 /**
+ * Can a point above the planet be seen from another point above it?
+ *
+ * The test usually quoted is dot(p, c) >= R², and it is wrong for anything
+ * with height: it asks whether p is beyond the camera's horizon *plane*, which
+ * only answers the question for a point sitting on the surface. Objects here
+ * stand several units tall, and that height buys real visibility over the
+ * curve.
+ *
+ * The exact condition is that the angle between them is at most the sum of
+ * their two horizon angles, acos(R/|c|) + acos(R/|p|). Expanding cos(a+b) and
+ * multiplying through by |p||c| clears both inverse cosines and the
+ * normalisation, leaving one dot product and two square roots.
+ */
+export function seesOverHorizon(p, c) {
+  const R2 = R * R;
+  const threshold =
+    R2 -
+    Math.sqrt(Math.max(0, c.lengthSq() - R2)) * Math.sqrt(Math.max(0, p.lengthSq() - R2));
+  return p.dot(c) >= threshold;
+}
+
+/**
  * Project `v` onto the tangent plane at `up` and normalise it.
  *
  * This is the load-bearing function of the whole camera. "Up" changes
