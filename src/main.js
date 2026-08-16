@@ -204,8 +204,27 @@ function updateMarker() {
   // sixty times a second would throw away the element the user is aiming at.
   setMarker(best);
 
-  markerEl.style.left = `${(_proj.x * 0.5 + 0.5) * innerWidth}px`;
-  markerEl.style.top = `${(-_proj.y * 0.5 + 0.5) * innerHeight}px`;
+  /*
+   * Keep the marker on screen.
+   *
+   * Standing at the foot of a monument puts its top well above the viewport,
+   * and the label rides 190% above that again. Unclamped it leaves the screen
+   * exactly when you are closest to it — and now that a lit marker is the link
+   * to the project, losing it there loses the only way in.
+   */
+  const w = markerEl.offsetWidth;
+  const h = markerEl.offsetHeight;
+  const pad = 8;
+  // Clear the progress dots, which sit centred along the top and are the one
+  // thing the marker reliably collides with once it is clamped upward.
+  const topInset = 42;
+  const x = (_proj.x * 0.5 + 0.5) * innerWidth;
+  const y = (-_proj.y * 0.5 + 0.5) * innerHeight;
+
+  markerEl.style.left = `${Math.min(Math.max(x, w / 2 + pad), innerWidth - w / 2 - pad)}px`;
+  // The element is translated up by 190% of its own height, so its top edge is
+  // at y - 1.9h. That is what has to clear the top of the viewport.
+  markerEl.style.top = `${Math.min(Math.max(y, h * 1.9 + topInset), innerHeight - pad)}px`;
   markerEl.style.opacity = "1";
   markerEl.classList.add("shown");
 }
