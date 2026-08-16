@@ -83,12 +83,31 @@ export function buildWorld(scene, P, content) {
   const planetGeo = new THREE.IcosahedronGeometry(R, 4);
   {
     const p = planetGeo.attributes.position;
+    const shade = new Float32Array(p.count * 3);
     const v = new THREE.Vector3();
+    const k = P.reliefShade ?? 0.15;
+
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i).normalize();
-      v.multiplyScalar(R + terrain(v.x, v.y, v.z) * RELIEF);
+      const h = terrain(v.x, v.y, v.z);
+      v.multiplyScalar(R + h * RELIEF);
       p.setXYZ(i, v.x, v.y, v.z);
+
+      // Vertex tint by height: high ground catches light, hollows sit in
+      // shadow. It multiplies the material colour, so the dawn transition can
+      // still recolour the ground underneath it without touching this.
+      //
+      // This is what makes relief legible in palettes where the lighting alone
+      // cannot do it. Riso is the extreme case — cream ground under a white
+      // sun produces almost no shading variation, so the terrain vanishes and
+      // you lose the ability to perceive your own speed, which is the entire
+      // reason the relief exists.
+      const s = 1 + h * k;
+      shade[i * 3] = s;
+      shade[i * 3 + 1] = s;
+      shade[i * 3 + 2] = s;
     }
+    planetGeo.setAttribute("color", new THREE.BufferAttribute(shade, 3));
     planetGeo.computeVertexNormals();
   }
   const planetMat = new THREE.MeshStandardMaterial({
@@ -96,6 +115,7 @@ export function buildWorld(scene, P, content) {
     roughness: 0.95,
     metalness: 0.0,
     flatShading: true,
+    vertexColors: true,
   });
   const planet = new THREE.Mesh(planetGeo, planetMat);
   planet.receiveShadow = true;
@@ -161,6 +181,7 @@ export function buildWorld(scene, P, content) {
     capsules.push({ a: base.clone(), b: top.clone(), r: rad });
     monuments.push({
       label: item.label,
+      blurb: item.blurb ?? "",
       href: item.href ?? null,
       base: base.clone(),
       pos: base.clone().addScaledVector(up, h * 0.9),
@@ -181,12 +202,35 @@ export function buildWorld(scene, P, content) {
     flatShading: true,
   });
 
-  for (let i = 0; i < 26; i++) {
+  /*
+   * Rejection sampling rather than pure random placement.
+   *
+   * Uniform random on a sphere clumps — it looks like a mistake rather than
+   * like scattered rocks, and it can drop a boulder on top of a monument or
+   * wall one in. Rejecting candidates that land too close to anything already
+   * placed costs a few hundred cheap distance checks and fixes both.
+   */
+  const placed = monuments.map((m) => ({ pos: m.base, clearance: 5.5 }));
+  let attempts = 0;
+
+  while (placed.length < monuments.length + 26 && attempts < 900) {
+    attempts++;
     const lat = (rand() - 0.5) * 150;
     const lon = rand() * 360;
     const rad = 0.7 + rand() * 1.9;
-    // Sink it so it reads as embedded in the ground rather than resting on it.
     const c = surface(lat, lon).setLength(R + rad * 0.45);
+
+    // Keep a gap of both radii plus a margin, so rocks read as separate
+    // objects and there is always a way through between them.
+    let ok = true;
+    for (const q of placed) {
+      if (c.distanceTo(q.pos) < q.clearance + rad + 1.2) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+
     const m = new THREE.Mesh(new THREE.IcosahedronGeometry(rad, 1), rockMat);
     m.position.copy(c);
     m.rotation.set(rand() * 3, rand() * 3, rand() * 3);
@@ -194,6 +238,7 @@ export function buildWorld(scene, P, content) {
     m.receiveShadow = true;
     scene.add(m);
     capsules.push({ a: c.clone(), b: c.clone(), r: rad });
+    placed.push({ pos: c, clearance: rad });
   }
 
   return {

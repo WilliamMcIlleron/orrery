@@ -8,6 +8,7 @@ import { Marble } from "./marble.js";
 import { ChaseCamera } from "./chase-camera.js";
 import { Progression } from "./progression.js";
 import { Audio } from "./audio.js";
+import { Wayfinder } from "./wayfinder.js";
 
 const paletteKey = resolvePaletteKey();
 const P = PALETTES[paletteKey];
@@ -44,6 +45,26 @@ const chase = new ChaseCamera(camera);
 const paletteState = makePaletteState(P);
 applyPaletteState(scene, renderer, handles, paletteState);
 
+/*
+ * The overlay has to survive two palettes that are nearly black and two that
+ * are nearly white. Hardcoding pale grey worked until Riso, where the arrow
+ * and the hint text disappeared into the paper.
+ *
+ * Relative luminance of the background decides which ink the DOM uses. sRGB
+ * coefficients, not a plain average — green carries most of perceived
+ * brightness and averaging gets light greens and deep blues wrong.
+ */
+{
+  const c = new THREE.Color(P.bg);
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const light = lum > 0.4;
+  const root = document.documentElement.style;
+  root.setProperty("--ink", light ? "#3a3630" : "#cfd6e4");
+  root.setProperty("--ink-soft", light ? "#6f6858" : "#7c8394");
+  root.setProperty("--ink-done", light ? "#a8631a" : "#ffd9a8");
+  root.setProperty("--ink-shadow", light ? "0 1px 3px rgba(255,255,255,.75)" : "0 1px 4px rgba(0,0,0,.9)");
+}
+
 /* ------------------------------------------------------------------- audio */
 
 const audio = new Audio();
@@ -68,6 +89,7 @@ if (muteBtn) {
 /* ------------------------------------------------------------- progression */
 
 const progressEl = document.getElementById("progress");
+const hintEl = document.getElementById("hint");
 
 function renderProgress(lit, total) {
   if (!progressEl) return;
@@ -77,20 +99,26 @@ function renderProgress(lit, total) {
   progressEl.setAttribute("aria-label", `${lit} of ${total} monuments lit`);
 }
 
+const wayfinder = new Wayfinder(document.getElementById("wayfinder"), camera);
+
 const progression = new Progression(monuments, {
   onLight: (index, lit, total) => {
     audio.chime(lit - 1);
     renderProgress(lit, total);
+    wayfinder.reset();
   },
   onComplete: () => {
     audio.swell(11);
     if (progressEl) progressEl.classList.add("done");
+    if (hintEl) {
+      hintEl.textContent = "open a project from its marker";
+      hintEl.style.opacity = "1";
+    }
   },
 });
 renderProgress(0, progression.total);
 
 const input = new Input(renderer.domElement, document.getElementById("stick"));
-const hintEl = document.getElementById("hint");
 input.onFirstUse = () => {
   ensureAudio();
   if (hintEl) hintEl.style.opacity = "0";
@@ -123,6 +151,29 @@ addEventListener("keydown", (e) => {
 const markerEl = document.getElementById("marker");
 const _proj = new THREE.Vector3();
 
+/** The monument currently under the marker, or null. */
+let focused = null;
+
+function setMarker(m) {
+  if (focused === m) return;
+  focused = m;
+  if (!m) return;
+
+  if (m.lit && m.href) {
+    // Only a lit monument is a link. Before that it is a name you found, and
+    // making it clickable would let someone skip the whole point of the piece.
+    markerEl.href = m.href;
+    markerEl.innerHTML =
+      `<span class="mk-name">${m.label}</span>` +
+      `<span class="mk-blurb">${m.blurb}</span>` +
+      `<span class="mk-open">open ↗</span>`;
+  } else {
+    markerEl.removeAttribute("href");
+    markerEl.textContent = m.label;
+  }
+  markerEl.classList.toggle("lit", !!m.lit);
+}
+
 function updateMarker() {
   if (!markerEl) return;
   let best = null;
@@ -136,6 +187,8 @@ function updateMarker() {
   }
   if (!best) {
     markerEl.style.opacity = "0";
+    markerEl.classList.remove("shown");
+    focused = null;
     return;
   }
   _proj.copy(best.pos).project(camera);
@@ -143,14 +196,26 @@ function updateMarker() {
   // the wrong side of the screen.
   if (_proj.z > 1) {
     markerEl.style.opacity = "0";
+    markerEl.classList.remove("shown");
     return;
   }
-  markerEl.textContent = best.label;
-  markerEl.classList.toggle("lit", best.lit);
+
+  // Rebuild only on change. This runs every frame, and rewriting innerHTML
+  // sixty times a second would throw away the element the user is aiming at.
+  setMarker(best);
+
   markerEl.style.left = `${(_proj.x * 0.5 + 0.5) * innerWidth}px`;
   markerEl.style.top = `${(-_proj.y * 0.5 + 0.5) * innerHeight}px`;
   markerEl.style.opacity = "1";
+  markerEl.classList.add("shown");
 }
+
+// Keyboard equivalent of clicking the marker, so the piece is finishable
+// without a pointer at all.
+addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  if (focused?.lit && focused.href) window.open(focused.href, "_blank", "noopener");
+});
 
 /* -------------------------------------------------------------------- loop */
 
@@ -189,6 +254,7 @@ function frame(now) {
   }
 
   progression.update(marble.pos, wall);
+  wayfinder.update(monuments, marble.pos, wall);
 
   // Only touch the scene while dawn is actually moving. Once it has landed
   // this costs nothing for the rest of the session.
@@ -238,6 +304,7 @@ addEventListener("resize", () => {
 if (location.search.includes("dev")) {
   window.__orrery = {
     marble, monuments, progression, audio, scene, renderer, handles, P,
+    camera, chase, wayfinder, capsules,
     /** Drop the marble next to monument `i`, on the surface. */
     warpTo(i) {
       const m = monuments[i];

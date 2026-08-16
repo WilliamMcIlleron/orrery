@@ -24,6 +24,7 @@ export const PALETTES = {
   playground: {
     name: "Playground",
     note: "daylit · no night side",
+    reliefShade: 0.16,
     bg: 0x9fd8e8, fogNear: 70, fogFar: 190,
     ground: 0x8ecf7a, rock: 0xb9895e, monument: 0xf4f1e8, marble: 0xffffff,
     accents: [0xff6b4a, 0xffc23d, 0x4aa3e8, 0x9b6bd6],
@@ -42,6 +43,7 @@ export const PALETTES = {
   deepfield: {
     name: "Deep field",
     note: "void · night side + travelling lamp",
+    reliefShade: 0.15,
     bg: 0x05070e, fogNear: 55, fogFar: 150,
     ground: 0x53706a, rock: 0x5b6675, monument: 0x39414d, marble: 0xf2f6ff,
     accents: [0xffb03a, 0x5fb8ff, 0x66e0a8, 0xff7aa8],
@@ -63,6 +65,7 @@ export const PALETTES = {
   dusk: {
     name: "Dusk",
     note: "warm terracotta · keeps night side",
+    reliefShade: 0.15,
     bg: 0x140f1c, fogNear: 55, fogFar: 150,
     ground: 0xc07a56, rock: 0x8f5a46, monument: 0x4a3830, marble: 0xfff0e0,
     accents: [0x4ecdc4, 0xffd166, 0xef476f, 0x8ecae6],
@@ -80,6 +83,7 @@ export const PALETTES = {
   riso: {
     name: "Riso",
     note: "flat print · no night side",
+    reliefShade: 0.34,
     bg: 0xf2ede1, fogNear: 80, fogFar: 210,
     ground: 0xdcd2bd, rock: 0xbdb198, monument: 0x2f2b26, marble: 0x2f2b26,
     accents: [0xe0503a, 0x2f5d7c, 0x3f7d5c, 0xd9a520],

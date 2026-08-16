@@ -9,11 +9,11 @@ you the whole time.
 
 You start in the dark. Four monuments stand on the surface, unlit. Roll into
 one and it lights and sounds a note. Light all four and dawn breaks over the
-whole planet.
+whole planet. A lit monument's marker becomes a link to the thing it names.
 
-**Work in progress.** World, physics, camera, progression and sound are done.
-Texture work and monuments that actually open the project they name are not —
-see [Where it is going](#where-it-is-going).
+**Work in progress.** World, physics, camera, progression, sound, wayfinding
+and links are done. Texture work is not — see
+[Where it is going](#where-it-is-going).
 
 ## Running it
 
@@ -115,6 +115,43 @@ room to land, and an instant sunrise reads as a bug rather than a reward.
 The scene is only touched while the value is actually moving. Once dawn has
 landed it costs nothing for the rest of the session.
 
+### Finding things on a sphere is not the obvious test
+
+Everything worth finding is over the horizon. That is the good part of the
+concept and also the risk, so after eleven seconds without progress an arrow
+appears at the screen edge pointing at the nearest unlit monument. It resets
+whenever one lights, and it hides the moment its target is genuinely visible —
+at that point the glowing collar is a better cue than an arrow.
+
+"Genuinely visible" is where this got interesting. Projection has no idea the
+world is round: a monument fifty degrees past the horizon still lands inside
+the screen rectangle, so an on-screen test alone thinks you can see something
+buried under a hemisphere of rock.
+
+The test usually quoted for this is `dot(p, c) >= R²`. **It is wrong here, and
+quietly.** It asks whether the target is beyond the camera's horizon *plane*,
+which is only the right question when the target sits on the surface. These
+monuments are six units tall, and that height buys real extra visibility over
+the curve — the plane test hid pillars that were plainly on screen.
+
+The exact condition is that the angle between the two points is no more than
+the sum of their horizon angles, `acos(R/|c|) + acos(R/|p|)`. Expand the cosine
+of that sum and multiply through by `|p||c|` and both the inverse cosines and
+the normalisation drop out:
+
+```
+dot(p, c)  >=  R² - sqrt(|c|² - R²) · sqrt(|p|² - R²)
+```
+
+One dot product and two square roots, exact, no trigonometry.
+
+### Rocks are placed by rejection sampling
+
+Uniform random on a sphere clumps. It reads as a mistake rather than as
+scattered rocks, and it will happily drop a boulder on top of a monument or
+wall one in. Rejecting candidates that land too close to anything already
+placed costs a few hundred cheap distance checks and fixes both.
+
 ### The world is seeded
 
 `mulberry32` with a fixed seed, so the planet is byte-for-byte identical on
@@ -127,6 +164,15 @@ planets, and a bug you saw once might never come back.
   a hockey puck and the whole scene reads as fake however good everything else is.
 - **Tone mapping is on.** Three ships with it off. Turning it on is the single
   largest free improvement available in any Three scene.
+- **The ground is tinted per vertex by terrain height**, so high ground catches
+  light and hollows sit in shadow. It multiplies the material colour, so dawn
+  still recolours the ground underneath it. This is what makes relief legible
+  in Riso, where cream ground under a white sun produces almost no shading of
+  its own and the terrain would otherwise vanish — taking with it the ability
+  to perceive your own speed, which is the entire reason the relief exists.
+- **The overlay picks its ink from the background's luminance.** Two palettes
+  are nearly black and two nearly white; pale grey text worked until it did
+  not.
 - **Device pixel ratio is capped at 2.** Phones report 3 and above; rendering
   at that buys nothing visible on a low-poly scene and costs a lot of heat.
 - **Nothing animates on its own.** The world is completely still until you move
@@ -151,12 +197,8 @@ It does not exist without the flag.
 
 ## Where it is going
 
-- **Monuments that open the project they name.** They are labelled and lit;
-  they do not go anywhere yet.
 - **Texture and material work.** Everything is flat-shaded colour right now.
-- **Riso needs contour lines.** Cream on cream gives almost no shading
-  variation, so in that palette the terrain relief disappears and you lose the
-  ability to perceive your own speed — the exact thing the relief exists for.
+- **More than four monuments**, once there is more worth putting on the planet.
 
 ## Credits
 

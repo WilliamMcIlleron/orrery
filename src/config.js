@@ -87,3 +87,11 @@ export const DAWN_HOLD = 0.9;
 
 /** Seconds for dawn to break fully. */
 export const DAWN_SECONDS = 7;
+
+/**
+ * Seconds without lighting a monument before the wayfinder arrow appears.
+ *
+ * Long enough that exploring on your own comes first and the arrow feels like
+ * help rather than instruction. Resets every time one lights.
+ */
+export const WAYFINDER_DELAY = 11;
