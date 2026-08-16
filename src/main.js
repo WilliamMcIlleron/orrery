@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE } from "./config.js";
+import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE, HIT_STOP } from "./config.js";
 import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
@@ -81,21 +81,49 @@ applyPaletteState(scene, renderer, handles, paletteState);
 const audio = new Audio();
 const muteBtn = document.getElementById("mute");
 
+const soundHintEl = document.getElementById("soundhint");
+
+function syncMuteButton() {
+  if (!muteBtn) return;
+  // Reflects whether sound is actually audible, not whether we asked for it.
+  // A speaker icon over a suspended context is the UI lying.
+  const off = audio.ready ? !audio.audible : audio.muted;
+  muteBtn.setAttribute("aria-pressed", String(off));
+  muteBtn.setAttribute("aria-label", off ? "Unmute sound" : "Mute sound");
+}
+
 // Audio contexts cannot start outside a user gesture, so the engine is built
-// on the very first input rather than at load.
+// on the very first input rather than at load. The control, however, is
+// visible from first paint: someone on a phone in public needs to be able to
+// say no *before* it happens, not discover it has already happened.
 function ensureAudio() {
   audio.start();
-  if (muteBtn) muteBtn.hidden = false;
+  syncMuteButton();
 }
 
 if (muteBtn) {
   muteBtn.addEventListener("click", () => {
-    const next = !audio.muted;
-    audio.setMuted(next);
-    muteBtn.setAttribute("aria-pressed", String(next));
-    muteBtn.setAttribute("aria-label", next ? "Unmute sound" : "Mute sound");
+    // A click here is itself a gesture, so it can also be the thing that
+    // starts the engine — tapping the speaker to turn sound ON must work.
+    if (!audio.ready && audio.muted) {
+      audio.setMuted(false);
+      audio.start();
+    } else {
+      audio.setMuted(!audio.muted);
+    }
+    syncMuteButton();
+    soundHintEl?.classList.add("gone");
   });
 }
+syncMuteButton();
+
+// The label is a one-time offer, not a permanent piece of chrome.
+setTimeout(() => soundHintEl?.classList.add("gone"), 5200);
+
+document.addEventListener("visibilitychange", () => {
+  audio.setPageVisible(document.visibilityState === "visible");
+  syncMuteButton();
+});
 
 /* ------------------------------------------------------------- progression */
 
@@ -136,6 +164,27 @@ const progression = new Progression(monuments, {
     wayfinder.reset();
   },
   onComplete: () => {
+    /*
+     * Aim the terminator.
+     *
+     * The lit cap is centred on the camera's forward tangent, which is a point
+     * on the horizon straight ahead of you. As the threshold walks from +1 to
+     * -1 the cap grows from there, so the line of light rises over the horizon
+     * you are looking at, travels toward you, crosses you at the halfway
+     * point, and carries on behind. You watch it coming.
+     *
+     * Centring it on the player instead would light the ground under your feet
+     * first and expand outward, which reads as a spotlight rather than a
+     * sunrise. Centring it opposite would keep it out of sight for half the
+     * transition.
+     */
+    handles.sweep.uSweepAxis.value.copy(chase.forward).normalize();
+    handles.sweep.uSweepRim.value.set(P.dawn?.sun ?? P.sun).multiplyScalar(0.42);
+    // Reduced motion: a half-width of 2 in cosine space covers the whole
+    // sphere at once, so the sweep degrades cleanly into the crossfade it
+    // replaced rather than needing a separate code path.
+    handles.sweep.uSweepSoft.value = REDUCED_MOTION ? 2.0 : 0.09;
+
     audio.swell(11);
     if (progressEl) progressEl.classList.add("done");
     if (hintEl) {
@@ -337,6 +386,7 @@ let frames = 0;
 let fpsAcc = 0;
 let workAcc = 0;
 let lastDawn = -1;
+let hitStop = 0;
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -350,15 +400,27 @@ function frame(now) {
 
   const t0 = performance.now();
 
+  /*
+   * Hit-stop: freeze the simulation for a few frames on a heavy impact.
+   *
+   * Rendering continues, so it is not a stall — the world simply stops
+   * advancing for about 90ms, which makes a hard landing land. It is the
+   * cheapest weight cue in games and almost nobody notices it consciously.
+   */
   const inp = input.read();
   let steps = 0;
-  while (accumulator >= DT && steps < MAX_STEPS) {
-    marble.step(DT, inp, chase.forward, capsules);
-    accumulator -= DT;
-    steps++;
+  if (hitStop > 0) {
+    hitStop -= wall;
+    accumulator = 0;
+  } else {
+    while (accumulator >= DT && steps < MAX_STEPS) {
+      marble.step(DT, inp, chase.forward, capsules);
+      accumulator -= DT;
+      steps++;
+    }
   }
 
-  marble.sync();
+  marble.sync(wall);
   if (lamp) {
     const d = marble.pos.length();
     lamp.position.copy(marble.pos).multiplyScalar((d + 4.2) / d);
@@ -373,6 +435,9 @@ function frame(now) {
   if (dawn !== lastDawn) {
     applyDawn(paletteState, P, dawn);
     applyPaletteState(scene, renderer, handles, paletteState);
+    // Threshold walks +1 (nothing lit) to -1 (everything lit). Padded a little
+    // past each end so the first and last slivers of ground actually finish.
+    handles.sweep.uSweepT.value = 1.12 - dawn * 2.24;
     atmosphere.set(paletteState.atmoColor, paletteState.atmoInt);
     post.setBloomStrength(paletteState.bloomStrength);
     lastDawn = dawn;
@@ -384,7 +449,13 @@ function frame(now) {
   }
   audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded);
   const hit = marble.takeImpact();
-  if (hit) audio.knock(hit);
+  if (hit) {
+    audio.knock(hit);
+    marble.squashOnLanding(hit);
+    // Only genuinely hard landings freeze. Every knock doing it would make
+    // ordinary rolling feel like the framerate is broken.
+    if (hit > 9) hitStop = HIT_STOP;
+  }
 
   chase.update(marble.pos, marble.vel, wall, marble.speed);
   updateMarker();

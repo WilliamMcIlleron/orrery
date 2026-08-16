@@ -16,6 +16,19 @@
  * so nothing is built until `start()` is called from a real input event.
  */
 
+const MASTER = 0.9;
+const STORE_KEY = "orrery.sound";
+
+function readStoredMute() {
+  try {
+    // Default is sound ON, but nothing is built until a gesture, so nobody is
+    // ambushed either way. Only an explicit previous "off" mutes.
+    return localStorage.getItem(STORE_KEY) === "off";
+  } catch {
+    return false;
+  }
+}
+
 /** A pentatonic run. Any four of these in order sound like progress. */
 const CHIME_HZ = [329.63, 392.0, 493.88, 587.33, 783.99];
 
@@ -26,7 +39,8 @@ export class Audio {
   constructor() {
     this.ctx = null;
     this.ready = false;
-    this.muted = false;
+    // Read before start(), which builds the graph in whichever state this is.
+    this.muted = readStoredMute();
     this._rollGain = null;
     this._rollFilter = null;
     this._master = null;
@@ -47,8 +61,13 @@ export class Audio {
     const ctx = this.ctx;
 
     this._master = ctx.createGain();
-    this._master.gain.value = this.muted ? 0 : 0.9;
+    // Always start silent and fade up. Audio that cuts in at full level is
+    // startling even when it was asked for.
+    this._master.gain.value = 0;
     this._master.connect(ctx.destination);
+    if (!this.muted) {
+      this._master.gain.setTargetAtTime(MASTER, ctx.currentTime, 0.35);
+    }
 
     /* ---- rolling loop ----
        A looping buffer of white noise, run through a lowpass. Speed opens the
@@ -102,9 +121,44 @@ export class Audio {
 
   setMuted(m) {
     this.muted = m;
+    try {
+      localStorage.setItem(STORE_KEY, m ? "off" : "on");
+    } catch { /* private mode; the choice just will not persist */ }
     if (this._master) {
-      this._master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05);
+      this._master.gain.setTargetAtTime(m ? 0 : MASTER, this.ctx.currentTime, 0.06);
     }
+  }
+
+  /**
+   * Park the context when the tab is hidden.
+   *
+   * A suspended context stops costing anything, and more importantly stops a
+   * background tab making noise — which is the single fastest way to get a
+   * page closed and never reopened.
+   */
+  setPageVisible(visible) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (!visible) {
+      this._master.gain.setTargetAtTime(0, t, 0.12);
+      this._suspendTimer = setTimeout(() => this.ctx.suspend().catch(() => {}), 320);
+      return;
+    }
+    clearTimeout(this._suspendTimer);
+    this.ctx.resume().catch(() => {});
+    if (!this.muted) this._master.gain.setTargetAtTime(MASTER, t, 0.25);
+  }
+
+  /**
+   * Whether sound is genuinely audible right now.
+   *
+   * iOS refuses resume() outside a gesture fairly often, and ignores it
+   * entirely while the hardware mute switch is on. The context's own state is
+   * the only honest signal — showing an unmuted speaker icon over a suspended
+   * context is the UI lying to the user.
+   */
+  get audible() {
+    return this.ready && !this.muted && this.ctx?.state === "running";
   }
 
   /**

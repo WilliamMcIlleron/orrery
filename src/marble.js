@@ -15,6 +15,7 @@ const _cp = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _gn = new THREE.Vector3();
+const _Y = new THREE.Vector3(0, 1, 0);
 const _rad = new THREE.Vector3();
 
 /**
@@ -27,6 +28,17 @@ const _rad = new THREE.Vector3();
  */
 export class Marble {
   constructor(scene, P) {
+    /*
+     * Two nested objects, deliberately.
+     *
+     * The mesh owns its spin, which is accumulated by premultiplying a
+     * quaternion every step and must never be reset. The rig owns position,
+     * surface orientation and scale. Squashing the mesh directly would mean
+     * writing scale on the same object whose rotation is being integrated, and
+     * the deformation would tumble with the marble instead of staying aligned
+     * with the ground.
+     */
+    this.rig = new THREE.Group();
     this.mesh = new THREE.Mesh(
       new THREE.IcosahedronGeometry(BALL_R, 3),
       new THREE.MeshStandardMaterial({
@@ -41,7 +53,11 @@ export class Marble {
       }),
     );
     this.mesh.castShadow = true;
-    scene.add(this.mesh);
+    this.rig.add(this.mesh);
+    scene.add(this.rig);
+
+    /** Current deformation, 0 = sphere. Positive stretches along the normal. */
+    this._squash = 0;
 
     // Spawn above the north pole and let it fall in. Cheaper than a scripted
     // intro and it demonstrates gravity in the first half second.
@@ -221,8 +237,44 @@ export class Marble {
     this.mesh.quaternion.premultiply(_q);
   }
 
-  /** Copy simulation state onto the mesh. Called once per rendered frame. */
-  sync() {
-    this.mesh.position.copy(this.pos);
+  /**
+   * Copy simulation state onto the rig, and deform.
+   *
+   * Squash and stretch is the oldest trick in animation and it works because
+   * a rigid sphere carries no information about the forces acting on it. Here
+   * the marble stretches along its direction of travel through the air and
+   * flattens against the ground on landing, springing back over about a fifth
+   * of a second.
+   *
+   * @param {number} dt real elapsed seconds
+   */
+  sync(dt) {
+    this.rig.position.copy(this.pos);
+
+    // Orient the rig so its local Y is the surface normal. The deformation is
+    // then always along and across the ground, whatever the marble is doing.
+    _up.copy(this.grounded ? this.groundN : this.pos).normalize();
+    _q.setFromUnitVectors(_Y, _up);
+    this.rig.quaternion.copy(_q);
+
+    // Airborne: stretch along the normal, proportional to vertical speed.
+    // Grounded: relax to a sphere. The landing impulse is injected by impact().
+    const vn = this.vel.dot(_up);
+    const target = this.grounded ? 0 : THREE.MathUtils.clamp(vn * 0.014, -0.16, 0.16);
+
+    // Critically damped enough to settle without wobbling like jelly, which
+    // would read as rubber rather than as a heavy marble.
+    const k = 1 - Math.exp(-14 * dt);
+    this._squash += (target - this._squash) * k;
+
+    const sy = 1 + this._squash;
+    // Preserve volume: what it loses in height it gains around the equator.
+    const sxz = 1 / Math.sqrt(Math.max(0.2, sy));
+    this.rig.scale.set(sxz, sy, sxz);
+  }
+
+  /** Kick the deformation on a hard landing. Called from the impact handler. */
+  squashOnLanding(strength) {
+    this._squash = Math.min(this._squash, -Math.min(0.3, strength * 0.022));
   }
 }

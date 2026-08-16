@@ -73,6 +73,14 @@ export const HEAD_LAG = 3.2;
  */
 export const DT = 1 / 120;
 
+/**
+ * Seconds the simulation freezes on a heavy impact.
+ *
+ * Rendering keeps going, so this is weight rather than a stall. Much past
+ * 0.12 and it stops reading as impact and starts reading as a dropped frame.
+ */
+export const HIT_STOP = 0.09;
+
 /** Hard cap on catch-up steps, so a backgrounded tab cannot spiral. */
 export const MAX_STEPS = 12;
 

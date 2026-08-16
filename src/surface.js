@@ -1,3 +1,5 @@
+import * as THREE from "three";
+
 /**
  * Surface detail, without a single texture file.
  *
@@ -51,17 +53,61 @@ const NOISE_GLSL = /* glsl */ `
 `;
 
 /**
+ * Shared state for the dawn terminator.
+ *
+ * One object, handed to every material that takes part, so a single write
+ * moves the ground, the rocks and the monuments together. Uniform *objects*
+ * are shared by reference — Three reads `.value` at draw time — which is what
+ * makes this work without a per-material update loop.
+ */
+export function makeSweep() {
+  return {
+    // Centre of the growing lit cap.
+    uSweepAxis: { value: new THREE.Vector3(0, 1, 0) },
+    // Cosine threshold. +1 is nothing lit, -1 is everything lit.
+    uSweepT: { value: 1.2 },
+    // Half-width of the leading edge, in cosine. Widened hugely under reduced
+    // motion, which degrades the sweep to a plain crossfade.
+    uSweepSoft: { value: 0.09 },
+    // Colour of the light line itself. Emissive, so bloom picks it up free.
+    uSweepRim: { value: new THREE.Color(0, 0, 0) },
+  };
+}
+
+const SWEEP_DECL = /* glsl */ `
+  uniform vec3 uSweepAxis;
+  uniform float uSweepT;
+  uniform float uSweepSoft;
+  uniform vec3 uSweepRim;
+  uniform vec3 uNight;
+  uniform vec3 uDawn;
+`;
+
+/**
  * @param {THREE.Material} material  a MeshStandardMaterial
  * @param {object} opts
  * @param {number} opts.scale    world-space frequency
  * @param {number} opts.colour   how much the tint moves, 0 to ~0.4
  * @param {number} opts.rough    how much roughness moves, 0 to ~0.5
+ * @param {object} [opts.sweep]  shared object from makeSweep(), enables dawn
+ * @param {number} [opts.night]  colour before the terminator passes
+ * @param {number} [opts.dawn]   colour after it
  */
-export function addSurfaceNoise(material, { scale = 0.22, colour = 0.2, rough = 0.35 } = {}) {
+export function addSurfaceNoise(
+  material,
+  { scale = 0.22, colour = 0.2, rough = 0.35, sweep = null, night = 0xffffff, dawn = null } = {},
+) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uNoiseScale = { value: scale };
     shader.uniforms.uNoiseColour = { value: colour };
     shader.uniforms.uNoiseRough = { value: rough };
+
+    if (sweep) {
+      // Shared by reference on purpose — see makeSweep().
+      Object.assign(shader.uniforms, sweep);
+      shader.uniforms.uNight = { value: new THREE.Color(night) };
+      shader.uniforms.uDawn = { value: new THREE.Color(dawn ?? night) };
+    }
 
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vOrrWorld;")
@@ -80,6 +126,7 @@ export function addSurfaceNoise(material, { scale = 0.22, colour = 0.2, rough = 
         uniform float uNoiseScale;
         uniform float uNoiseColour;
         uniform float uNoiseRough;
+        ${sweep ? SWEEP_DECL : ""}
         ${NOISE_GLSL}`,
       )
       // After color_fragment so it multiplies whatever the vertex tint and the
@@ -88,7 +135,32 @@ export function addSurfaceNoise(material, { scale = 0.22, colour = 0.2, rough = 
         "#include <color_fragment>",
         `#include <color_fragment>
         float orrN = orr_fbm(vOrrWorld * uNoiseScale);
-        diffuseColor.rgb *= 1.0 + (orrN - 0.5) * uNoiseColour * 2.0;`,
+        diffuseColor.rgb *= 1.0 + (orrN - 0.5) * uNoiseColour * 2.0;
+        ${sweep ? `
+        /*
+         * Dawn arrives as a line that crosses the world, not as a filter fading
+         * in over it. The lit region is a spherical cap around uSweepAxis whose
+         * threshold walks from +1 (nothing) to -1 (everything).
+         *
+         * Sampled from the world position, never the vertex normal: this
+         * terrain is flat-shaded, and a per-face signal would turn the
+         * terminator into a jagged polygon edge instead of a smooth line.
+         */
+        float orrC = dot(normalize(vOrrWorld), uSweepAxis);
+        float orrS = smoothstep(uSweepT - uSweepSoft, uSweepT + uSweepSoft * 0.6, orrC);
+        diffuseColor.rgb *= mix(uNight, uDawn, orrS);` : ""}`,
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        ${sweep ? `
+        // The leading edge glows. Bloom is already running, so this becomes a
+        // band of light travelling over the terrain for free.
+        float orrEdge = 1.0 - clamp(abs(orrC - uSweepT) / max(uSweepSoft * 1.35, 0.001), 0.0, 1.0);
+        // Narrow and fifth-power: bloom is already running at strength ~1, and a
+        // wide or bright edge stops being a line of light and becomes a flare
+        // across the whole screen at the exact moment you want clarity.
+        totalEmissiveRadiance += uSweepRim * pow(orrEdge, 4.0);` : ""}`,
       )
       .replace(
         "#include <roughnessmap_fragment>",
@@ -99,7 +171,7 @@ export function addSurfaceNoise(material, { scale = 0.22, colour = 0.2, rough = 
   };
 
   // Materials with different injected code must not share a compiled program.
-  material.customProgramCacheKey = () => `orr-noise-${scale}-${colour}-${rough}`;
+  material.customProgramCacheKey = () => `orr-noise-${scale}-${colour}-${rough}-${sweep ? 1 : 0}`;
   material.needsUpdate = true;
   return material;
 }

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { R, RELIEF, WORLD_SEED, TOUCH_RANGE } from "./config.js";
-import { addSurfaceNoise } from "./surface.js";
+import { addSurfaceNoise, makeSweep } from "./surface.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface } from "./geometry.js";
 
@@ -19,6 +19,11 @@ export function buildWorld(scene, P, content) {
   const rand = mulberry32(WORLD_SEED);
   const capsules = [];
   const monuments = [];
+
+  // Shared by the ground, the rocks and the monuments, so one write moves the
+  // terminator across all three at once.
+  const sweep = makeSweep();
+  const D = P.dawn ?? {};
 
   /* ---- lighting ---- */
   const sun = new THREE.DirectionalLight(P.sun, P.sunInt);
@@ -119,7 +124,9 @@ export function buildWorld(scene, P, content) {
     planetGeo.computeVertexNormals();
   }
   const planetMat = new THREE.MeshStandardMaterial({
-    color: P.ground,
+    // White, because the sweep supplies the colour. Leaving the palette colour
+    // here would multiply it in twice.
+    color: 0xffffff,
     roughness: 0.95,
     metalness: 0.0,
     flatShading: true,
@@ -127,7 +134,10 @@ export function buildWorld(scene, P, content) {
   });
   // Grain and roughness variation, generated in the shader. Without it the
   // ground is solid colour and every facet reads as paint.
-  addSurfaceNoise(planetMat, { scale: 0.34, colour: 0.19, rough: 0.5 });
+  addSurfaceNoise(planetMat, {
+    scale: 0.34, colour: 0.19, rough: 0.5,
+    sweep, night: P.ground, dawn: D.ground ?? P.ground,
+  });
 
   const planet = new THREE.Mesh(planetGeo, planetMat);
   planet.receiveShadow = true;
@@ -147,11 +157,14 @@ export function buildWorld(scene, P, content) {
   const UP_Y = new THREE.Vector3(0, 1, 0);
   const UP_Z = new THREE.Vector3(0, 0, 1);
   const monumentMat = new THREE.MeshStandardMaterial({
-    color: P.monument,
+    color: 0xffffff,
     roughness: 0.7,
     metalness: 0.05,
   });
-  addSurfaceNoise(monumentMat, { scale: 1.1, colour: 0.14, rough: 0.35 });
+  addSurfaceNoise(monumentMat, {
+    scale: 1.1, colour: 0.14, rough: 0.35,
+    sweep, night: P.monument, dawn: D.monument ?? P.monument,
+  });
 
   content.forEach((item, i) => {
     const base = surface(item.lat, item.lon);
@@ -317,14 +330,17 @@ export function buildWorld(scene, P, content) {
 
   /* ---- boulders ---- */
   const rockMat = new THREE.MeshStandardMaterial({
-    color: P.rock,
+    color: 0xffffff,
     roughness: 1.0,
     metalness: 0.0,
     flatShading: true,
   });
   // Higher frequency than the ground: rocks are smaller, so the same world
   // scale would give each one a single flat sample and no variation at all.
-  addSurfaceNoise(rockMat, { scale: 0.85, colour: 0.26, rough: 0.4 });
+  addSurfaceNoise(rockMat, {
+    scale: 0.85, colour: 0.26, rough: 0.4,
+    sweep, night: P.rock, dawn: D.rock ?? P.rock,
+  });
 
   /*
    * Rejection sampling rather than pure random placement.
@@ -369,7 +385,7 @@ export function buildWorld(scene, P, content) {
     capsules,
     monuments,
     lamp,
-    handles: { sun, hemi, lamp, starMat, planetMat, rockMat, monumentMat },
+    handles: { sun, hemi, lamp, starMat, planetMat, rockMat, monumentMat, sweep },
   };
 }
 
@@ -394,9 +410,9 @@ export function applyPaletteState(scene, renderer, handles, state) {
   handles.hemi.groundColor.copy(state.hemiGround);
   handles.hemi.intensity = state.hemiInt;
 
-  handles.planetMat.color.copy(state.ground);
-  handles.rockMat.color.copy(state.rock);
-  handles.monumentMat.color.copy(state.monument);
+  // Ground, rock and monument colour are NOT written here. They belong to the
+  // terminator sweep in the shader — writing them would crossfade the whole
+  // planet at once and undo the effect entirely.
 
   if (handles.lamp) handles.lamp.intensity = state.lampInt;
   if (handles.starMat) handles.starMat.opacity = state.stars;
