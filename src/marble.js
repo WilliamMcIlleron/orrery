@@ -4,6 +4,7 @@ import {
   DRAG, ROLL_FRIC, BOUNCE, MAX_SPEED, JUMP_SPEED, COYOTE_TIME,
 } from "./config.js";
 import { orthonormalise, closestOnSegment, groundRadius, groundNormal } from "./geometry.js";
+import { addSurfaceNoise } from "./surface.js";
 
 // Module-scope scratch vectors. Allocating inside the step would produce a few
 // hundred short-lived Vector3s a second and hand the GC a reason to stutter.
@@ -52,6 +53,23 @@ export class Marble {
         flatShading: true,
       }),
     );
+    /*
+     * Veining, sampled in object space so it turns with the ball.
+     *
+     * The marble is the thing you look at for the entire piece, and it was the
+     * only object in the scene with no features at all — a plain sphere under
+     * a directional light barely reads as rotating, which quietly wasted the
+     * roll integration that exists specifically to sell that it is.
+     */
+    addSurfaceNoise(this.mesh.material, {
+      scale: 1.15,
+      colour: 0.13,
+      rough: 0.5,
+      objectSpace: true,
+      veins: P.marbleVeins ?? 0.55,
+      veinColour: P.marbleVein ?? 0x000000,
+    });
+
     this.mesh.castShadow = true;
     this.rig.add(this.mesh);
     scene.add(this.rig);

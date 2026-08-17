@@ -27,6 +27,7 @@ export const PALETTES = {
   playground: {
     name: "Playground",
     note: "daylit · no night side",
+    marbleVein: 0xe05a3a, marbleVeins: 0.5,
     strata: 0.5,
     // Bright, clean, faintly warm. Almost no split — a toy world should not
     // look photographed.
@@ -57,6 +58,7 @@ export const PALETTES = {
   deepfield: {
     name: "Deep field",
     note: "void · night side + travelling lamp",
+    marbleVein: 0x394a63, marbleVeins: 0.6,
     strata: 0.6,
     // Cool shadows, warm highlights — the classic opposition, and the reason
     // a night scene reads as cold without every pixel being blue. Shadows are
@@ -91,6 +93,7 @@ export const PALETTES = {
   dusk: {
     name: "Dusk",
     note: "warm terracotta · keeps night side",
+    marbleVein: 0x7a4630, marbleVeins: 0.6,
     strata: 0.6,
     // Pushed hardest of the four. Deep blue-violet shadows against a strongly
     // warm key is what makes terracotta read as evening rather than as orange.
@@ -120,6 +123,7 @@ export const PALETTES = {
   riso: {
     name: "Riso",
     note: "flat print · no night side",
+    marbleVein: 0xe0503a, marbleVeins: 0.75,
     strata: 0.95,
     // A print has no vignette and no blacks. Lift hard, pull gain down, and
     // let the ink sit in a narrow band — that compression *is* the look.

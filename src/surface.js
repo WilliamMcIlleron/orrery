@@ -88,6 +88,11 @@ export function makeSweep() {
   };
 }
 
+const VEIN_DECL = /* glsl */ `
+  uniform float uVeins;
+  uniform vec3 uVeinColour;
+`;
+
 const STRATA_DECL = /* glsl */ `
   uniform float uStrata;
   uniform float uR;
@@ -113,15 +118,27 @@ const SWEEP_DECL = /* glsl */ `
  * @param {number} [opts.night]  colour before the terminator passes
  * @param {number} [opts.dawn]   colour after it
  * @param {number} [opts.strata] strength of height/slope layering, 0 disables
+ * @param {boolean} [opts.objectSpace] sample in object space instead of world
+ * @param {number} [opts.veins]  vein contrast for the marble, 0 disables
+ * @param {number} [opts.veinColour] colour of the veins
  */
 export function addSurfaceNoise(
   material,
-  { scale = 0.22, colour = 0.2, rough = 0.35, sweep = null, night = 0xffffff, dawn = null, strata = 0 } = {},
+  {
+    scale = 0.22, colour = 0.2, rough = 0.35,
+    sweep = null, night = 0xffffff, dawn = null, strata = 0,
+    objectSpace = false, veins = 0, veinColour = 0x000000,
+  } = {},
 ) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uNoiseScale = { value: scale };
     shader.uniforms.uNoiseColour = { value: colour };
     shader.uniforms.uNoiseRough = { value: rough };
+
+    if (veins > 0) {
+      shader.uniforms.uVeins = { value: veins };
+      shader.uniforms.uVeinColour = { value: new THREE.Color(veinColour) };
+    }
 
     if (strata > 0) {
       shader.uniforms.uStrata = { value: strata };
@@ -142,7 +159,13 @@ export function addSurfaceNoise(
       // includes when something else has already asked for a world position.
       .replace(
         "#include <begin_vertex>",
-        "#include <begin_vertex>\n  vOrrWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+        // World space for anything that stands still, object space for anything
+        // that turns. A rotating mesh sampled in world space slides through a
+        // fixed noise field: the pattern stays put while the object spins
+        // underneath it, which reads as a bug rather than as a marble.
+        objectSpace
+          ? "#include <begin_vertex>\n  vOrrWorld = transformed;"
+          : "#include <begin_vertex>\n  vOrrWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;",
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -153,6 +176,7 @@ export function addSurfaceNoise(
         uniform float uNoiseScale;
         uniform float uNoiseColour;
         uniform float uNoiseRough;
+        ${veins > 0 ? VEIN_DECL : ""}
         ${strata > 0 ? STRATA_DECL : ""}
         ${sweep ? SWEEP_DECL : ""}
         ${NOISE_GLSL}`,
@@ -164,6 +188,22 @@ export function addSurfaceNoise(
         `#include <color_fragment>
         float orrN = orr_fbm(vOrrWorld * uNoiseScale);
         diffuseColor.rgb *= 1.0 + (orrN - 0.5) * uNoiseColour * 2.0;
+        ${veins > 0 ? `
+        /*
+         * Veining, for the marble.
+         *
+         * Ridged noise — folding the field about its midpoint with abs() turns
+         * smooth blobs into sharp creases, which is the standard way to get
+         * veins or canyons out of value noise.
+         *
+         * It exists to make rotation legible. A plain sphere spinning under
+         * directional light barely reads as turning at all; the object you
+         * watch for the entire piece was the one object in it with no
+         * features to track.
+         */
+        float orrV = 1.0 - abs(orr_fbm(vOrrWorld * uNoiseScale * 2.1) - 0.5) * 2.0;
+        orrV = pow(clamp(orrV, 0.0, 1.0), 7.0);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uVeinColour, orrV * uVeins);` : ""}
         ${sweep ? `
         /*
          * Dawn arrives as a line that crosses the world, not as a filter fading
@@ -245,7 +285,7 @@ export function addSurfaceNoise(
 
   // Materials with different injected code must not share a compiled program.
   material.customProgramCacheKey = () =>
-    `orr-noise-${scale}-${colour}-${rough}-${sweep ? 1 : 0}-${strata}`;
+    `orr-noise-${scale}-${colour}-${rough}-${sweep ? 1 : 0}-${strata}-${objectSpace ? 1 : 0}-${veins}`;
   material.needsUpdate = true;
   return material;
 }
