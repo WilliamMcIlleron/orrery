@@ -137,6 +137,7 @@ export function buildWorld(scene, P, content) {
   addSurfaceNoise(planetMat, {
     scale: 0.34, colour: 0.19, rough: 0.5,
     sweep, night: P.ground, dawn: D.ground ?? P.ground,
+    strata: P.strata ?? 0.55,
   });
 
   const planet = new THREE.Mesh(planetGeo, planetMat);

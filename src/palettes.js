@@ -27,6 +27,7 @@ export const PALETTES = {
   playground: {
     name: "Playground",
     note: "daylit · no night side",
+    strata: 0.5,
     // Bright, clean, faintly warm. Almost no split — a toy world should not
     // look photographed.
     grade: {
@@ -56,6 +57,7 @@ export const PALETTES = {
   deepfield: {
     name: "Deep field",
     note: "void · night side + travelling lamp",
+    strata: 0.6,
     // Cool shadows, warm highlights — the classic opposition, and the reason
     // a night scene reads as cold without every pixel being blue. Shadows are
     // lifted a touch so the unlit hemisphere keeps detail instead of clipping.
@@ -89,6 +91,7 @@ export const PALETTES = {
   dusk: {
     name: "Dusk",
     note: "warm terracotta · keeps night side",
+    strata: 0.6,
     // Pushed hardest of the four. Deep blue-violet shadows against a strongly
     // warm key is what makes terracotta read as evening rather than as orange.
     grade: {
@@ -117,6 +120,7 @@ export const PALETTES = {
   riso: {
     name: "Riso",
     note: "flat print · no night side",
+    strata: 0.95,
     // A print has no vignette and no blacks. Lift hard, pull gain down, and
     // let the ink sit in a narrow band — that compression *is* the look.
     grade: {

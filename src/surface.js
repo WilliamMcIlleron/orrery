@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { R, RELIEF } from "./config.js";
 
 /**
  * Surface detail, without a single texture file.
@@ -20,8 +21,21 @@ import * as THREE from "three";
  */
 
 const NOISE_GLSL = /* glsl */ `
+  /*
+   * Hoskins-style integer hash, not the fract(sin(dot(...))) one.
+   *
+   * Each fbm call is three octaves of trilinear value noise, and each of those
+   * needs eight lattice samples: twenty-four hashes per call, two calls per
+   * ground fragment. With a sine in there that is nearly fifty transcendentals
+   * per pixel of planet — which is what pays for everything below.
+   *
+   * It is also better behaved: fract(sin(x)) degenerates visibly at large
+   * coordinates on mobile GPUs with lower float precision.
+   */
   float orr_hash(vec3 p) {
-    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
   }
 
   float orr_vnoise(vec3 p) {
@@ -74,6 +88,12 @@ export function makeSweep() {
   };
 }
 
+const STRATA_DECL = /* glsl */ `
+  uniform float uStrata;
+  uniform float uR;
+  uniform float uRelief;
+`;
+
 const SWEEP_DECL = /* glsl */ `
   uniform vec3 uSweepAxis;
   uniform float uSweepT;
@@ -92,15 +112,22 @@ const SWEEP_DECL = /* glsl */ `
  * @param {object} [opts.sweep]  shared object from makeSweep(), enables dawn
  * @param {number} [opts.night]  colour before the terminator passes
  * @param {number} [opts.dawn]   colour after it
+ * @param {number} [opts.strata] strength of height/slope layering, 0 disables
  */
 export function addSurfaceNoise(
   material,
-  { scale = 0.22, colour = 0.2, rough = 0.35, sweep = null, night = 0xffffff, dawn = null } = {},
+  { scale = 0.22, colour = 0.2, rough = 0.35, sweep = null, night = 0xffffff, dawn = null, strata = 0 } = {},
 ) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uNoiseScale = { value: scale };
     shader.uniforms.uNoiseColour = { value: colour };
     shader.uniforms.uNoiseRough = { value: rough };
+
+    if (strata > 0) {
+      shader.uniforms.uStrata = { value: strata };
+      shader.uniforms.uR = { value: R };
+      shader.uniforms.uRelief = { value: RELIEF };
+    }
 
     if (sweep) {
       // Shared by reference on purpose — see makeSweep().
@@ -126,6 +153,7 @@ export function addSurfaceNoise(
         uniform float uNoiseScale;
         uniform float uNoiseColour;
         uniform float uNoiseRough;
+        ${strata > 0 ? STRATA_DECL : ""}
         ${sweep ? SWEEP_DECL : ""}
         ${NOISE_GLSL}`,
       )
@@ -163,6 +191,51 @@ export function addSurfaceNoise(
         totalEmissiveRadiance += uSweepRim * pow(orrEdge, 4.0);` : ""}`,
       )
       .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+        ${strata > 0 ? `
+        /*
+         * Height and slope layering.
+         *
+         * The terrain is an analytic function, so both of these are free — and
+         * they are the two signals that make ground read as geology rather
+         * than as a bumpy ball painted one colour. Sediment settles in the
+         * hollows, crests catch light, and anything steep breaks through to
+         * bare rock regardless of its height.
+         *
+         * This runs after normal_fragment_maps rather than in color_fragment
+         * because it needs the surface normal, and Three has not computed one
+         * yet at colour time. diffuseColor is still mutable here; lighting
+         * consumes it a few chunks later.
+         *
+         * The tints are multipliers, not colours, so the palette and the dawn
+         * sweep keep control of what the ground actually is.
+         */
+        float orrH = clamp((length(vOrrWorld) - uR) / uRelief, -1.0, 1.0);
+        float orrSlope = 1.0 - clamp(dot(normalize(normal), normalize(vOrrWorld)), 0.0, 1.0);
+
+        // One very low frequency lookup. This is what kills the sense of
+        // tiling: without it every square metre has identical statistics.
+        float orrMacro = orr_vnoise(vOrrWorld * 0.035);
+
+        // Jitter the boundaries with the grain already computed, or the height
+        // bands read as contour lines drawn on the planet.
+        float orrHj = orrH + (orrN - 0.5) * 0.55;
+        vec3 orrTint = mix(vec3(0.84, 0.88, 0.94), vec3(1.0), smoothstep(-0.7, 0.1, orrHj));
+        orrTint = mix(orrTint, vec3(1.12, 1.07, 0.99), smoothstep(0.05, 0.85, orrHj));
+
+        // Steep faces expose bare rock whatever their height.
+        orrTint = mix(orrTint, vec3(1.2, 1.17, 1.12), smoothstep(0.02, 0.20, orrSlope) * 0.75);
+
+        // Strata. The fbm term is a domain warp — without it these are perfect
+        // rings around the planet, which is worse than no bands at all.
+        float orrBand = fract(orrHj * 5.0 + orr_fbm(vOrrWorld * 0.09) * 0.45);
+        float orrEdge2 = smoothstep(0.0, 0.07, orrBand) * (1.0 - smoothstep(0.10, 0.19, orrBand));
+        orrTint *= 1.0 - orrEdge2 * 0.16 * (0.55 + orrMacro);
+
+        diffuseColor.rgb *= mix(vec3(1.0), orrTint, uStrata * (0.7 + orrMacro * 0.6));` : ""}`,
+      )
+      .replace(
         "#include <roughnessmap_fragment>",
         `#include <roughnessmap_fragment>
         float orrR = orr_fbm(vOrrWorld * uNoiseScale * 2.3 + 19.0);
@@ -171,7 +244,8 @@ export function addSurfaceNoise(
   };
 
   // Materials with different injected code must not share a compiled program.
-  material.customProgramCacheKey = () => `orr-noise-${scale}-${colour}-${rough}-${sweep ? 1 : 0}`;
+  material.customProgramCacheKey = () =>
+    `orr-noise-${scale}-${colour}-${rough}-${sweep ? 1 : 0}-${strata}`;
   material.needsUpdate = true;
   return material;
 }

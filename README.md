@@ -79,6 +79,29 @@ At this amplitude, against a marble of this size, the mismatch is invisible.
 What it buys is the ability to perceive your own speed: on a perfectly smooth
 sphere nothing passes you, and rolling feels identical at every velocity.
 
+### The ground is layered, and the layering is free
+
+The terrain is an analytic function, so height and slope cost nothing to
+recover in the shader — and they are exactly the two signals that make ground
+read as geology rather than as a bumpy ball painted one colour. Sediment
+settles in the hollows, crests catch the light, anything steep breaks through
+to bare rock regardless of height, and strata band with the terrain.
+
+The bands are domain-warped by a second fbm lookup. Without that they are
+perfect rings around the planet, which is worse than no bands at all. A single
+very low frequency sample modulates the whole thing so the grain is not
+statistically identical everywhere, which is what actually kills the sense of
+tiling.
+
+This runs after `normal_fragment_maps` rather than in `color_fragment`, because
+it needs the surface normal and Three has not computed one yet at colour time.
+
+It made the frame *cheaper*. The value-noise hash was
+`fract(sin(dot(p, k)) * 43758.5)`, and each fbm call is three octaves of
+trilinear noise needing eight lattice samples each — twenty-four hashes per
+call, two calls per ground fragment, so roughly fifty transcendentals per pixel
+of planet. Swapping to an integer hash paid for the layering and then some.
+
 ### There are no audio files
 
 Every sound is synthesised at runtime from noise and oscillators. Nothing to
