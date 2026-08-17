@@ -548,6 +548,16 @@ canvas { display: block; }
 
 .beacon:hover { border-color: currentColor; }
 
+/* Parked for reading. Overrides the per-frame transform written by Beacons. */
+.beacon.pinned {
+  transform: translate(-50%, 0) !important;
+  left: 50%;
+  top: auto;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 108px);
+  opacity: 1 !important;
+  border-color: currentColor;
+}
+
 /* ------------------------------------------------------------- run clock */
 
 #clock {

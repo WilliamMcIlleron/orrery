@@ -26,6 +26,8 @@ export class Beacons {
     this.camera = camera;
     this.items = [];
     this.active = false;
+    /** The beacon currently holding keyboard focus, if any. */
+    this.focused = null;
 
     for (const m of monuments) {
       const el = document.createElement("a");
@@ -40,6 +42,25 @@ export class Beacons {
         `<span class="bc-blurb"></span></span>`;
       el.querySelector(".bc-name").textContent = m.label;
       el.querySelector(".bc-blurb").textContent = m.blurb;
+      /*
+       * Keyboard focus pins the label.
+       *
+       * These track their pillars in 3D, so most of them are off screen or
+       * behind the planet at any moment — and tabbing to a link you cannot see
+       * is worse than not being able to tab to it at all. When one takes
+       * focus it stops tracking and parks somewhere legible, so a keyboard
+       * user can walk all four and open any of them without ever moving the
+       * marble.
+       */
+      el.addEventListener("focus", () => {
+        this.focused = el;
+        el.classList.add("pinned");
+      });
+      el.addEventListener("blur", () => {
+        if (this.focused === el) this.focused = null;
+        el.classList.remove("pinned");
+      });
+
       container.appendChild(el);
       this.items.push({ m, el });
     }
@@ -58,6 +79,13 @@ export class Beacons {
     if (!this.active) return;
 
     for (const { m, el } of this.items) {
+      // A pinned label is being read. Leave it where it is.
+      if (el === this.focused) {
+        el.style.opacity = "1";
+        el.style.pointerEvents = "auto";
+        continue;
+      }
+
       // Same exact horizon test the wayfinder uses. Projection alone would
       // happily place a label for a pillar buried under a hemisphere of rock.
       if (!seesOverHorizon(m.pos, this.camera.position)) {
