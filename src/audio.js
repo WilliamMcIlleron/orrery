@@ -113,9 +113,8 @@ function buildImpulse(ctx, seconds, channels) {
  *
  * A bed of filtered noise is what a rolling object sounds like only in the
  * sense that a photocopier sounds like rain. A real rolling contact is a rapid
- * stream of tiny impacts, so this bakes exactly that: about 1400 two-
- * millisecond bursts scattered through five seconds, each with its own
- * amplitude.
+ * stream of tiny impacts, so this bakes exactly that: 900 bursts of 1.6ms
+ * noise scattered through 4.7 seconds, each with its own amplitude.
  *
  * Speed then drives playbackRate rather than gain, which moves the grain rate
  * and their pitch together — precisely how a rolling object behaves, and

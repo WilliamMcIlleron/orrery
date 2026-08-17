@@ -238,6 +238,24 @@ a `warpTo(i)` helper. Reaching a monument on the far side of the planet takes
 fifteen seconds of rolling, which is a slow way to check that dawn still works.
 It does not exist without the flag.
 
+## Things that were built and then removed
+
+**A trail burning into the ground behind the marble.** Built, measured, looked
+at three ways, cut.
+
+The planet is 500 triangles, so its vertices sit about 2.7 units apart, and a
+flat-shaded face only lights when all three of its corners do. A brush the
+width of the marble therefore marks one vertex at a time and leaves a dotted
+line; widening it until the mark is continuous takes it to 5.4 units, which is
+six times the marble's diameter — a swathe, not a track. Turned up far enough
+to actually see, it bleached the ground rather than drawing a route.
+
+It is also behind you, and the chase camera looks forward.
+
+Making it work needs a render-target decal system, and the alternative —
+subdividing the planet further — costs the low-poly look that is the entire
+visual identity. Noted here so it does not get proposed again.
+
 ## Where it is going
 
 - **Surface texture.** Materials are still flat colour; the shapes and light do
