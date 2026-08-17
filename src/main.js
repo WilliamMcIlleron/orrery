@@ -325,6 +325,7 @@ addEventListener("keydown", (e) => {
 
 const markerEl = document.getElementById("marker");
 const _proj = new THREE.Vector3();
+const _radial = new THREE.Vector3();
 
 /** The monument currently under the marker, or null. */
 let focused = null;
@@ -488,6 +489,8 @@ function frame(now) {
     handles.sweep.uSweepT.value = 1.12 - dawn * 2.24;
     atmosphere.set(paletteState.atmoColor, paletteState.atmoInt);
     post.setBloomStrength(paletteState.bloomStrength);
+    // Night sounds small and close; morning opens up.
+    audio.setDawn(dawn);
     lastDawn = dawn;
   }
 
@@ -495,7 +498,12 @@ function frame(now) {
     marble.jumped = false;
     audio.jump();
   }
-  audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded);
+  // Slope is 0 on the flat and rises with the steepness of the ground under
+  // the marble, which the contact normal already knows.
+  const slope = marble.grounded
+    ? 1 - marble.groundN.dot(_radial.copy(marble.pos).normalize())
+    : 0;
+  audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded, slope);
   const hit = marble.takeImpact();
   if (hit) {
     // A landing has a body under the knock; a rock does not.
