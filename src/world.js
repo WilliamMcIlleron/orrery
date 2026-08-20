@@ -3,6 +3,7 @@ import { R, RELIEF, WORLD_SEED, TOUCH_RANGE, PLANET_DETAIL, SUN_DIR as SUN_DIR_R
 import { addSurfaceNoise, makeSweep } from "./surface.js";
 import { makeBloomable } from "./postfx.js";
 import { createSky } from "./sky.js";
+import { makeBoulder, scatterLandmarks } from "./landmarks.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface, closestOnSegment } from "./geometry.js";
 
@@ -451,15 +452,44 @@ export function buildWorld(scene, P, content) {
     }
     if (!ok) continue;
 
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(rad, 1), rockMat);
+    // Every boulder gets its own lumps and its own squash. Twenty-six copies
+    // of one icosphere is a texture, not a landscape, and the eye picks the
+    // repeat up long before it can say why.
+    const { geometry, radius } = makeBoulder(rad, rand);
+    const m = new THREE.Mesh(geometry, rockMat);
     m.position.copy(c);
     m.rotation.set(rand() * 3, rand() * 3, rand() * 3);
     m.castShadow = true;
     m.receiveShadow = true;
     scene.add(m);
-    capsules.push({ a: c.clone(), b: c.clone(), r: rad });
-    placed.push({ pos: c, clearance: rad });
+    // Sized to the furthest lump rather than to the nominal radius, so the
+    // marble never rolls through a corner that stuck out.
+    capsules.push({ a: c.clone(), b: c.clone(), r: radius });
+    placed.push({ pos: c, clearance: radius });
   }
+
+  /* ---- landmarks ---- */
+  /*
+   * Placed before the ambient-occlusion bake, so their capsules are in the
+   * list when it runs and every stone gets welded to the ground it stands on.
+   */
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: P.crystal ?? P.accents?.[0] ?? 0xffffff,
+    // Faint, not glowing. On the bloom layer this is enough to make a cluster
+    // legible across the unlit hemisphere without competing with a monument.
+    emissive: new THREE.Color(P.crystal ?? P.accents?.[0] ?? 0xffffff).multiplyScalar(P.lamp ? 0.55 : 0.12),
+    roughness: 0.35,
+    metalness: 0.0,
+    flatShading: true,
+  });
+  const crystalClusters = scatterLandmarks(
+    scene,
+    { stone: monumentMat, crystal: crystalMat },
+    rand,
+    capsules,
+    placed,
+    { circle: 2, arch: 3, crystal: 6 },
+  );
 
   /*
    * Bake ambient occlusion into the vertex colours the height tint already uses.
@@ -517,9 +547,10 @@ export function buildWorld(scene, P, content) {
     capsules,
     monuments,
     lamp,
+    crystalClusters,
     handles: {
       sun, aimShadow, hemi, lamp, starMat, planetMat, rockMat, monumentMat, sweep,
-      moonMat: sky.moonMat, bodyMat: sky.bodyMat, ringMat: sky.ringMat,
+      moonMat: sky.moonMat, bodyMat: sky.bodyMat, ringMat: sky.ringMat, crystalMat,
     },
   };
 }

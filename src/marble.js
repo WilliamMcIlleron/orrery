@@ -99,6 +99,15 @@ export class Marble {
     this.airborneFor = 0;
 
     /**
+     * The capsule that produced the impact in `impact`, or null for the ground.
+     *
+     * The world is made of different materials and they should not all sound
+     * like a rock. Written wherever `impact` is written, for the same reason
+     * `landed` is.
+     */
+    this.hitCapsule = null;
+
+    /**
      * Whether the impact currently held in `impact` was a landing.
      *
      * Written only where `impact` is written, so it always describes the same
@@ -227,6 +236,7 @@ export class Marble {
         // which are airborne in the strict sense and sound absurd with a
         // landing thump under them.
         this.landed = this.airborneFor > 0.12;
+        this.hitCapsule = null;
       }
       vel.addScaledVector(_gn, -vn * (1 + BOUNCE));
     }
@@ -255,6 +265,7 @@ export class Marble {
           // in the same step. Without this, hitting a boulder on the way down
           // would inherit the landing flag the ground just set.
           this.landed = false;
+          this.hitCapsule = c;
         }
         vel.addScaledVector(_n, -vn * (1 + BOUNCE));
       }

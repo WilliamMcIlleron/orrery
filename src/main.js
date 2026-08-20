@@ -3,6 +3,7 @@ import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE, HIT_STOP } from "./con
 import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
+import { fadeClusters, ringCluster } from "./landmarks.js";
 import { Input, isControlTarget } from "./input.js";
 import { Marble } from "./marble.js";
 import { ChaseCamera } from "./chase-camera.js";
@@ -41,7 +42,7 @@ document.getElementById("loading")?.remove();
 
 /* ------------------------------------------------------------------- world */
 
-const { capsules, monuments, lamp, handles } = buildWorld(scene, P, CONTENT);
+const { capsules, monuments, lamp, handles, crystalClusters } = buildWorld(scene, P, CONTENT);
 const atmosphere = createAtmosphere(scene, P);
 const post = new Post(renderer, scene, camera, P);
 const marble = new Marble(scene, P);
@@ -540,13 +541,19 @@ function frame(now) {
     ? 1 - marble.groundN.dot(_radial.copy(marble.pos).normalize())
     : 0;
   audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded, slope);
+  fadeClusters(crystalClusters, wall);
+
   const hit = marble.takeImpact();
   if (hit) {
-    // A landing has a body under the knock; a rock does not. The flag is
-    // written by whichever contact won the peak, so it needs no clearing here
-    // — clearing it inside this branch used to let it latch across the
-    // impact-free contacts of ordinary rolling.
-    if (marble.landed) audio.land(hit);
+    const struck = marble.hitCapsule;
+    // A landing has a body under the knock; a rock does not; a crystal does
+    // not sound like either. The flag is written by whichever contact won the
+    // peak, so it needs no clearing here — clearing it inside this branch used
+    // to let it latch across the impact-free contacts of ordinary rolling.
+    if (struck?.kind === "crystal") {
+      audio.crystal(hit, struck.cluster);
+      ringCluster(crystalClusters, struck.cluster, hit);
+    } else if (marble.landed) audio.land(hit);
     else audio.knock(hit);
     marble.squashOnLanding(hit);
     // Only genuinely hard landings freeze. Every knock doing it would make
@@ -595,7 +602,7 @@ addEventListener("resize", () => {
 // dawn works. `?dev` lets a test put the marble where it needs to be.
 if (location.search.includes("dev")) {
   window.__orrery = {
-    marble, monuments, progression, audio, scene, renderer, handles, P,
+    marble, monuments, progression, audio, scene, renderer, handles, P, crystalClusters,
     camera, chase, wayfinder, capsules, post, atmosphere,
     /** Drop the marble next to monument `i`, on the surface. */
     warpTo(i) {

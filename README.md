@@ -11,6 +11,12 @@ You start in the dark. Four monuments stand on the surface, unlit. Roll into
 one and it lights and sounds a note. Light all four and dawn breaks over the
 whole planet. A lit monument's marker becomes a link to the thing it names.
 
+Between them: boulders, rings of standing stones, arches you can roll under,
+and crystals that ring when you hit them. A moon and a ringed companion hang
+overhead and rise and set as you travel, which is the only way to tell where
+you are on a planet with no landmarks you can see from more than a third of
+the way round.
+
 **Work in progress.** World, physics, camera, progression, surface shading,
 sound, wayfinding and links are done. See
 [Where it is going](#where-it-is-going).
@@ -138,6 +144,13 @@ someone looks at for forty seconds.
   is written next to the impact it describes, and a boulder struck on the way
   down clears it, because a rock is not a floor.
 - **Chimes** are two sine partials climbing a pentatonic run, one per monument.
+- **Crystals** ring on three partials at 1, 2.76 and 5.4 — a stretched,
+  inharmonic series, which is roughly what a struck bar does and what a
+  harmonic series conspicuously does not. Harmonic partials sound like an
+  organ; these sound like glass. Two milliseconds of attack, because anything
+  slower is a pad and not a strike. The pitch comes from the same pentatonic
+  run the monuments use, indexed by which cluster you hit, so no two clusters
+  are the same note and none of them can clash with a chime.
 - **Everything has a reverb send**, from a generated impulse response, at a
   different depth per sound. A chime is 55% wet and the rolling loop is 5%:
   the world should sound large around the things that ring and close around
@@ -303,6 +316,54 @@ still about the size of a facet on a boulder.
 `?detail=N` on the URL overrides it, so the comparison can be repeated rather
 than argued about.
 
+### Every capsule was an investment
+
+The collision system stores every solid thing as a segment plus a radius, and
+the note above says that means a new kind of obstacle costs nothing. This is
+the release where that got tested.
+
+A ring of standing stones is nine capsules on end. An arch is fourteen laid
+along a curve, which is why you can roll under one without a line of
+special-case code anywhere. A crystal cluster is five or six leaning at
+different angles. All of it fell out of the routine that was already there for
+boulders, and all of it is picked up for free by the ambient-occlusion bake,
+which welds every new stone to the ground it stands on because the bake reads
+the same capsule list.
+
+Capsules also carry a `kind` now, which is what lets a crystal sound like a
+crystal. The marble records which capsule produced the impact next to the
+impact itself, so the sound is chosen by what was struck rather than by how
+hard.
+
+### One landmark is one draw call
+
+Naively, two stone circles, three arches and six crystal clusters is a hundred
+and thirty meshes, and each one is drawn three times a frame: once for the
+scene, once into the shadow map, once into the bloom pass. That is about three
+hundred and fifty draw calls to render eleven objects.
+
+None of the pieces ever move relative to each other, so baking each piece's
+transform into its vertices and merging the lot brings a whole landmark down to
+one geometry. Measured on an Intel Iris Xe: 464 draw calls before, 160 after,
+the same 36,800 triangles and the same image. The world with everything in it
+now costs about what the empty version did.
+
+### No boulder is the same boulder twice
+
+They used to be one icosphere at twenty-six different scales and rotations,
+which is a texture rather than a landscape — the eye finds the repeat long
+before it can say what is wrong.
+
+Each one now displaces every vertex along its own direction by a hash *of that
+direction*, then squashes on three axes. Keying on direction rather than on
+vertex index is the part that matters: `PolyhedronGeometry` is non-indexed, so
+every shared corner exists once per triangle touching it, and moving those
+copies independently tears the rock open along every edge. The same trick puts
+the craters on the moon.
+
+The collider is sized to the furthest lump the jitter produced rather than to
+the nominal radius, so the marble never rolls through a corner that stuck out.
+
 ### The world is seeded
 
 `mulberry32` with a fixed seed, so the planet is byte-for-byte identical on
@@ -399,6 +460,8 @@ visual identity. Noted here so it does not get proposed again.
 ## Where it is going
 
 - **Dust off the marble at speed.** The trail is not coming back — see above.
+- **The overlay is still generic.** The world looks designed and the chrome
+  looks installed, and the chrome is a third of every frame.
 - **More than four monuments**, once there is more worth putting on the planet.
 
 ## Credits

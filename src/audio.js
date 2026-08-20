@@ -41,6 +41,10 @@ const SWELL_HZ = [98.0, 146.83, 220.0, 329.63];
 const SEND = {
   chime: 0.55, swell: 0.7, knock: 0.18,
   land: 0.22, jump: 0.2, tick: 0.4, roll: 0.05,
+  // Wettest thing in the piece by some way. A struck crystal should sound like
+  // it is ringing into the space around it, which is the whole reason to have
+  // put one on a planet with nothing else on it.
+  crystal: 0.62,
 };
 
 function readStoredMute() {
@@ -398,6 +402,53 @@ export class Audio {
     this._route(g, SEND.jump);
     osc.start(t);
     osc.stop(t + 0.25);
+  }
+
+  /**
+   * A struck crystal.
+   *
+   * The world is made of more than one material now and it should not all
+   * sound like a rock. Three partials on a stretched, inharmonic series —
+   * 1, 2.76, 5.4 — which is roughly what a struck bar does and what a
+   * harmonic series conspicuously does not. Harmonic partials sound like an
+   * organ; these sound like glass.
+   *
+   * The pitch is chosen from the pentatonic run the monuments use, indexed by
+   * the cluster, so two clusters are never the same note and none of them can
+   * clash with a chime.
+   */
+  crystal(strength, index = 0) {
+    if (!this.ready || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    // Its own rate limit, separate from the knock's: resting against a crystal
+    // should not trill.
+    if (t - (this._lastCrystal ?? -1) < 0.11) return;
+    this._lastCrystal = t;
+
+    const amp = Math.min(1, strength / 9);
+    if (amp < 0.05) return;
+
+    const DEGREES = [0, 2, 4, 7, 9, 12];
+    const semis = DEGREES[index % DEGREES.length] + 12 * (index % 2);
+    const f0 = 523.25 * Math.pow(2, semis / 12);
+
+    for (const [mult, gain, decay] of [[1, 1, 1.7], [2.76, 0.42, 1.1], [5.4, 0.17, 0.7]]) {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f0 * mult, t);
+
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      // Two milliseconds of attack. Any slower and it is a pad, not a strike.
+      g.gain.linearRampToValueAtTime(amp * 0.16 * gain, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+
+      osc.connect(g);
+      this._route(g, SEND.crystal);
+      osc.start(t);
+      osc.stop(t + decay + 0.05);
+    }
   }
 
   /** Coming back down: a knock with a low body under it. */
