@@ -50,10 +50,17 @@ second finger on a touch screen, or Q/E and R/F on a keyboard. Steering follows
 the camera, so looking left and pushing forward sends you left — the controls
 answer to what is on screen rather than to a heading that is not.
 
+Looking stops you steering, for as long as you are looking. On a touch screen
+the second finger takes over and the first one is set aside; when you lift the
+look finger the steering finger gets the stick back where it currently is, so
+it resumes from a standstill rather than snapping to whatever deflection it was
+holding.
+
 Standing still, the view stays exactly where you put it. Once you are moving it
 unwinds back behind the marble, in proportion to speed, because a camera behind
 you is what makes the controls legible and nobody who glanced over their
-shoulder should have to put it back by hand.
+shoulder should have to put it back by hand — but never while you are actually
+looking, and not for a moment afterwards either.
 
 The four buttons along the bottom switch palette, or press <kbd>P</kbd> to
 cycle. They are not four coats of paint on the same thing: two of them are
@@ -530,6 +537,26 @@ degrees, push forward, and the marble sets off along a heading that is no
 longer on screen. There are now two vectors: `forward` is what the chase
 follows, `viewForward` is that turned by the look, and steering reads the
 second one.
+
+**Looking and steering will fight each other, twice over.** Neither was
+obvious until it was measured.
+
+Starting a look did not release the stick, so the stick stayed exactly where
+the finger left it and went on steering at that value. On a two-finger look the
+marble accelerated to full speed while the player was trying to turn the
+camera. On a mouse it is worse and less visible: every mouse button shares one
+`pointerId`, so a right-drag begun while the left button is down captures the
+same id the stick is keyed on, and every subsequent move goes to the look while
+the stick sits frozen and still active.
+
+Then the recentre undoes the look as fast as it is applied, because it scales
+with speed and the fight is worst exactly when you are moving. Measured at full
+speed, a drag worth sixty degrees came out at eight.
+
+So a look releases the stick and holds the recentre — while looking, and for
+0.6s after so that letting go does not snap the view back. Measured after: the
+same two-finger gesture leaves the marble coasting down from 9.8 to 5.3 instead
+of climbing to the cap, and delivers the full 0.99 radians the drag was worth.
 
 **The camera can be pointed into the ground.** On a displaced surface it does
 not have to be below the marble to be inside a hill. The terrain is an analytic

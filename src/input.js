@@ -42,6 +42,19 @@ export class Input {
     this._look = { yaw: 0, pitch: 0 };
     /** The pointer currently doing the looking, if any. */
     this._lookId = null;
+    /** A steering finger set aside for the duration of a look. */
+    this._suspended = null;
+    /**
+     * Seconds left of the hold on the camera's auto-recentre.
+     *
+     * Looking would otherwise be a fight. The camera unwinds the view back
+     * behind the marble in proportion to speed, so at any real pace it undoes
+     * the look as fast as it is applied — measured at full speed, a drag that
+     * should have turned the view 60 degrees ended up at 8. The hold pauses
+     * that while you are looking and for a moment after, so the view stays
+     * where you put it and then eases back on its own.
+     */
+    this._hold = 0;
 
     this.stickEl = stickEl;
     this.baseEl = stickEl?.querySelector(".base") ?? null;
@@ -97,7 +110,63 @@ export class Input {
     if (k.has("f")) pitch -= LOOK_KEY_RATE * 0.6 * dt;
     this._look.yaw = 0;
     this._look.pitch = 0;
+    // The keys get the same hold a drag does, or holding Q against the
+    // recentre at speed barely moves the view.
+    if (yaw || pitch) this._hold = 0.6;
+    else if (this._hold > 0) this._hold = Math.max(0, this._hold - dt);
     return { yaw, pitch };
+  }
+
+  /** True while a pointer is dragging the view. */
+  get looking() {
+    return this._lookId !== null;
+  }
+
+  /** True while the camera should not unwind the free look. */
+  get holdingView() {
+    return this._lookId !== null || this._hold > 0;
+  }
+
+  /**
+   * Let go of the virtual stick, wherever it currently is.
+   *
+   * @param {boolean} suspend remember the finger, so it can take over again
+   */
+  _endStick(suspend = false) {
+    const t = this.touch;
+    if (!t.active) return;
+    if (suspend && t.id !== null) this._suspended = { id: t.id, x: t.ox, y: t.oy };
+    t.active = false;
+    t.id = null;
+    t.x = t.y = 0;
+    if (this.stickEl) this.stickEl.style.opacity = "0";
+  }
+
+  /**
+   * Hand the stick back to a finger that never left the glass.
+   *
+   * Ending a look would otherwise leave the steering finger present but dead:
+   * still on the screen, doing nothing, until you lift it and put it down
+   * again. Re-arming it where it currently is — rather than where it started —
+   * means it resumes from a standstill instead of snapping back to whatever
+   * deflection it held when the look began.
+   */
+  _resumeStick() {
+    const p = this._suspended;
+    this._suspended = null;
+    if (!p || this.touch.active) return;
+    const t = this.touch;
+    t.active = true;
+    t.id = p.id;
+    t.ox = p.x;
+    t.oy = p.y;
+    t.x = 0;
+    t.y = 0;
+    if (this.baseEl) {
+      this.baseEl.style.left = this.knobEl.style.left = `${p.x}px`;
+      this.baseEl.style.top = this.knobEl.style.top = `${p.y}px`;
+      this.stickEl.style.opacity = "1";
+    }
   }
 
   _markUsed() {
@@ -123,12 +192,30 @@ export class Input {
       this._lookId = e.pointerId;
       this._lx = e.clientX;
       this._ly = e.clientY;
+      /*
+       * Let go of the stick.
+       *
+       * Without this the stick stays exactly where the finger left it and goes
+       * on steering at that value for as long as you look — you end up racing
+       * away in a direction you are no longer choosing while trying to turn
+       * the camera against its own recentring. Measured before the fix: a
+       * two-finger look sent the marble straight to full speed, and the look
+       * that was supposed to turn the view ended up at eight degrees.
+       *
+       * On a mouse it also sidesteps a real trap: every mouse button shares
+       * one pointerId, so a right-drag started while the left button is down
+       * captures the same id the stick is keyed on, and every subsequent move
+       * goes to the look while the stick sits frozen and still active.
+       */
+      this._endStick(true);
       target.setPointerCapture(e.pointerId);
       this._markUsed();
       return;
     }
     if (e.pointerType === "mouse" && e.button !== 0) return;
 
+    // No starting the stick underneath an active look.
+    if (this._lookId !== null) return;
     if (this.touch.active) return;
     const t = this.touch;
     t.active = true;
@@ -147,6 +234,13 @@ export class Input {
   }
 
   _move(e) {
+    // A suspended finger is still on the glass and still moving. Follow it, so
+    // that when it takes the stick back it does so from where it actually is.
+    if (this._suspended && e.pointerId === this._suspended.id) {
+      this._suspended.x = e.clientX;
+      this._suspended.y = e.clientY;
+      return;
+    }
     if (e.pointerId === this._lookId) {
       // Screen-down drags the view down, which is the direct mapping — you are
       // pushing the world, not the camera. Inverting it is a preference nobody
@@ -177,11 +271,20 @@ export class Input {
   _up(e) {
     if (e.pointerId === this._lookId) {
       this._lookId = null;
+      // A moment before the camera is allowed to start unwinding, so letting
+      // go does not snap the view back the instant you release.
+      this._hold = 0.6;
+      this._resumeStick();
+      return;
+    }
+    if (this._suspended && e.pointerId === this._suspended.id) {
+      this._suspended = null;
       return;
     }
     const t = this.touch;
     if (!t.active || e.pointerId !== t.id) return;
     t.active = false;
+    t.id = null;
     t.x = t.y = 0;
     if (this.stickEl) this.stickEl.style.opacity = "0";
   }

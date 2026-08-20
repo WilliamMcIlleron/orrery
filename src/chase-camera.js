@@ -100,7 +100,7 @@ export class ChaseCamera {
    * @param {number} dt          real elapsed seconds, not the fixed step
    * @param {number} speed        current speed, for the fov kick
    */
-  update(pos, vel, dt, speed = 0) {
+  update(pos, vel, dt, speed = 0, holdView = false) {
     _up.copy(pos).normalize();
 
     // Swing the heading toward the direction of travel, but only once moving
@@ -120,10 +120,17 @@ export class ChaseCamera {
      * put it. Moving, it unwinds — because the camera being behind you is what
      * makes the controls legible, and a player who looked over their shoulder
      * and then set off should not have to put it back by hand.
+     *
+     * `holdView` suspends it while the player is actually looking, and for a
+     * moment after. Without that, looking at speed is a fight the player
+     * cannot win: the unwind removes the rotation as fast as the drag applies
+     * it, and a gesture worth sixty degrees measured out at eight.
      */
-    const back = 1 - Math.exp(-RECENTRE * Math.min(1, speed / MAX_SPEED) * dt);
-    this.yaw -= this.yaw * back;
-    this.pitch -= this.pitch * back;
+    if (!holdView) {
+      const back = 1 - Math.exp(-RECENTRE * Math.min(1, speed / MAX_SPEED) * dt);
+      this.yaw -= this.yaw * back;
+      this.pitch -= this.pitch * back;
+    }
 
     // The heading the camera actually uses: the chase heading, turned by yaw.
     this.viewForward.copy(this.forward).applyAxisAngle(_up, this.yaw);

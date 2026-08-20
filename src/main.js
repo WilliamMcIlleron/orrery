@@ -693,7 +693,7 @@ function frame(now) {
     const l = input.takeLook(wall);
     if (l.yaw || l.pitch) chase.look(l.yaw, l.pitch);
   }
-  chase.update(marble.pos, marble.vel, wall, marble.speed);
+  chase.update(marble.pos, marble.vel, wall, marble.speed, input.holdingView);
   // The marker owns the pillar you are standing at; its beacon steps aside so
   // there are never two labels on one monument.
   beacons.suppress = focused;
