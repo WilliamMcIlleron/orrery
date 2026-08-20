@@ -64,6 +64,33 @@ html, body {
 /* The world itself takes every gesture: a drag is the control, and a pinch
    starting here would fight it. Everything outside the canvas stays zoomable. */
 canvas { display: block; touch-action: none; }
+
+/*
+ * The veil. See --veil in main.js for why it exists.
+ *
+ * Body pseudo-elements rather than markup, because it is presentation with no
+ * content and nothing should be able to focus it or read it aloud. Sits under
+ * every control and over the canvas.
+ */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+body::before {
+  top: 0;
+  height: 132px;
+  background: linear-gradient(to bottom, var(--veil, transparent), transparent 100%);
+}
+body::after {
+  bottom: 0;
+  height: 215px;
+  background: linear-gradient(to top, var(--veil, transparent), transparent 100%);
+}
 #stick { touch-action: none; }
 
 /* Visually hidden, still read by screen readers. The canvas is opaque to
@@ -80,19 +107,69 @@ canvas { display: block; touch-action: none; }
   border: 0;
 }
 
-/* Shared glass treatment. One place, so panels cannot drift apart. */
+/*
+ * Two treatments, and the split is the whole idea.
+ *
+ * A panel that carries text over unpredictable terrain has to be legible
+ * against cream ground and near-black ground in the same session, and only a
+ * scrim does that reliably. Those keep the frosted glass.
+ *
+ * Everything else — the controls — is drawn rather than filled: hairlines,
+ * rings and tick marks. An orrery is a brass instrument covered in engraved
+ * scales, and that is a better place to get the chrome from than the frosted
+ * lozenge every component library has shipped since 2019. It also puts far
+ * less opaque furniture between the viewer and the world, which is the thing
+ * they came for.
+ */
 .glass,
-#marker,
-#pal,
-.icon-btn,
-#jump {
+/*
+ * The marker keeps a scrim, because it is the one label that has to stay
+ * readable over cream ground and near-black ground in the same session. It
+ * loses the pill radius: a plate, squared off, reading as an annotation
+ * rather than as a chat bubble.
+ */
+#marker {
   background: var(--glass);
   border: 1px solid var(--glass-line);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   backdrop-filter: blur(16px) saturate(1.4);
-  box-shadow:
-    0 1px 0 var(--glass-hi) inset,
-    0 8px 30px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
+}
+
+/* Drawn bezels. The two round controls are a pair and read as one family. */
+.icon-btn,
+#jump {
+  background: none;
+  border: 1px solid var(--ink);
+  box-shadow: none;
+  text-shadow: var(--ink-shadow);
+}
+/*
+ * A soft pool of shade under the jump control.
+ *
+ * It sits higher than the rest of the chrome, above the edge veil, and in the
+ * daylit palette that put a 9.5px label over bright green ground at 3.25:1 —
+ * a real AA failure, and one that was there before the chrome was redrawn.
+ * A radial wash reads as shade rather than as a panel and takes it to 5.9.
+ */
+#jump::after {
+  content: "";
+  position: absolute;
+  inset: -34px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--veil, transparent), transparent 100%);
+  pointer-events: none;
+}
+
+/* An inner hairline, offset, the way a dial has a second scribe line. */
+#jump::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0.28;
 }
 
 :focus-visible {
@@ -141,11 +218,13 @@ canvas { display: block; touch-action: none; }
   font-size: 10.5px;
   letter-spacing: 0.02em;
   color: var(--ink);
-  opacity: 0.42;
+  opacity: 0.7;
   text-decoration: none;
   text-shadow: var(--ink-shadow);
   pointer-events: auto;
   padding: 6px 2px;
+  /* Small text over the world, so this is measured, not chosen: see the
+     contrast table in the README. */
   border-bottom: 1px solid transparent;
   transition: opacity var(--fast), border-color var(--fast);
 }
@@ -172,7 +251,7 @@ canvas { display: block; touch-action: none; }
   letter-spacing: 0.34em;
   text-transform: uppercase;
   color: var(--ink);
-  opacity: 0.62;
+  opacity: 0.82;
   text-shadow: var(--ink-shadow);
 }
 
@@ -227,8 +306,8 @@ canvas { display: block; touch-action: none; }
   left: 0;
   top: 0;
   transform: translate(-50%, -190%);
-  padding: 9px 13px;
-  border-radius: 9px;
+  padding: 8px 14px;
+  border-radius: 3px;
   color: var(--ink);
   text-decoration: none;
   text-align: center;
@@ -240,19 +319,38 @@ canvas { display: block; touch-action: none; }
   transition: opacity var(--fast), border-color var(--slow), transform var(--slow);
 }
 
-/* A small nib pointing down at the thing being labelled. */
+/*
+ * A leader line down to the thing being labelled, not a speech nib.
+ *
+ * The nib made this a tooltip, and a tooltip is a thing that explains an
+ * interface. This is an annotation on a plate: a hairline dropping to the
+ * object, ending in a small open circle exactly where the monument is. Same
+ * job, and it belongs to the same drawn-instrument family as the controls
+ * rather than to a component library.
+ */
 #marker::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -5px;
-  width: 9px;
-  height: 9px;
-  margin-left: -4.5px;
-  transform: rotate(45deg);
-  background: var(--glass);
-  border-right: 1px solid var(--glass-line);
-  border-bottom: 1px solid var(--glass-line);
+  top: 100%;
+  width: 1px;
+  height: 15px;
+  margin-left: -0.5px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+#marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 13px);
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.7;
 }
 
 #marker .mk-name {
@@ -364,26 +462,65 @@ canvas { display: block; touch-action: none; }
   gap: 10px;
 }
 
-/* Segmented control. The moving background is a single element that slides,
-   rather than four backgrounds fading — one object moving reads as one
-   control, four fading reads as four buttons. */
+/*
+ * The palette selector, as a scale on an instrument.
+ *
+ * It used to be a glass pill with a sliding capsule behind the active label,
+ * which is a perfectly good control and belongs to every component library
+ * written since 2019. The world it sits over does not look like anything else;
+ * the chrome did, and it is a third of the frame.
+ *
+ * So: four labels tracked out along a hairline rule, with a mark that slides
+ * under the live one. An orrery is a brass instrument covered in engraved
+ * scales, and that is where this comes from rather than from a profile in the
+ * design library.
+ *
+ * The moving mark is still a single element that slides rather than four that
+ * fade, for the original reason — one object moving reads as one control,
+ * four fading reads as four buttons.
+ */
 #pal {
   position: relative;
   display: flex;
-  padding: 4px;
-  border-radius: 999px;
+  padding: 0 0 9px;
+}
+
+/* The rule the scale is drawn on. */
+#pal::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  height: 1px;
+  background: var(--ink);
+  opacity: 0.22;
+  pointer-events: none;
 }
 
 #pal .seg-bg {
   position: absolute;
-  top: 4px;
   bottom: 4px;
   left: 0;
-  border-radius: 999px;
-  background: var(--ink);
-  opacity: 0.92;
+  height: 9px;
+  border-radius: 0;
+  background: none;
+  opacity: 1;
   transition: transform var(--slow), width var(--slow);
   pointer-events: none;
+}
+
+/* The mark itself: a short heavy tick centred in the slot, not a filled slab.
+   A slab is a pill by another name. */
+#pal .seg-bg::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  background: var(--ink);
 }
 
 #pal button {
@@ -397,23 +534,40 @@ canvas { display: block; touch-action: none; }
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--ink);
-  opacity: 0.6;
+  opacity: 0.78;
   padding: 0 13px;
   height: 40px;
   min-height: 40px;
   cursor: pointer;
-  border-radius: 999px;
-  transition: opacity var(--fast), color var(--fast);
+  text-shadow: var(--ink-shadow);
+  transition: opacity var(--fast), letter-spacing var(--slow);
+  /* 0.62, not 0.5. Over the veil this clears AA against both inks; without
+     the veil it did not, and "it looked fine on the palette I was testing"
+     is how contrast bugs ship. */
   white-space: nowrap;
 }
 
-#pal button:hover { opacity: 0.9; }
+/* Every label is a minor tick on the rule. */
+#pal button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 1px;
+  height: 4px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+#pal button:hover { opacity: 0.92; }
 
 #pal button[aria-pressed="true"] {
   opacity: 1;
-  /* Sits on the light pill, so it has to invert. */
-  color: var(--scrim-ink, #11141a);
+  /* Nothing is inverted any more, because nothing sits on a filled pill. The
+     live label reads as live by being brighter and slightly wider. */
+  letter-spacing: 0.16em;
 }
+#pal button[aria-pressed="true"]::after { opacity: 0; }
 
 .icon-btn,
 #jump {
@@ -484,8 +638,10 @@ canvas { display: block; touch-action: none; }
   font-size: 9.5px;
   letter-spacing: 0.17em;
   text-transform: uppercase;
-  opacity: 0.62;
+  opacity: 0.9;
 }
+#jump:hover { opacity: 1; }
+#jump:active { transform: scale(0.95); }
 
 #jump:active { transform: scale(0.93); opacity: 1; }
 
@@ -509,17 +665,16 @@ canvas { display: block; touch-action: none; }
   margin: 0;
   max-width: calc(100vw - 32px);
   padding: 7px 15px;
-  border-radius: 999px;
-  background: var(--glass);
-  border: 1px solid var(--glass-line);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  backdrop-filter: blur(14px) saturate(1.3);
+  /* No capsule. It is one line of instruction, and wrapping it in a frosted
+     lozenge was the single loudest piece of component-library furniture on
+     the page. The shadow is what makes it legible over bright ground. */
   text-align: center;
   font-size: 10px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--ink);
-  opacity: 0.86;
+  text-shadow: var(--ink-shadow);
+  opacity: 0.95;
   pointer-events: none;
   transition: opacity var(--slow);
 }
@@ -543,8 +698,11 @@ canvas { display: block; touch-action: none; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px 7px 9px;
-  border-radius: 999px;
+  padding: 7px 13px 7px 10px;
+  /* Squared to match the marker: these are the same object at the end of the
+     piece, and a pill here would put two different label languages on screen
+     at once. */
+  border-radius: 3px;
   background: var(--glass);
   border: 1px solid var(--glass-line);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);

@@ -70,7 +70,21 @@ applyPaletteState(scene, renderer, handles, paletteState);
   root.setProperty("--ink-done", light ? "#a8631a" : "#ffd9a8");
   root.setProperty("--ink-shadow", light ? "0 1px 3px rgba(255,255,255,.75)" : "0 1px 4px rgba(0,0,0,.9)");
   root.setProperty("--scrim", light ? "rgba(246,242,232,.90)" : "rgba(6,8,14,.86)");
-  // What sits on top of the active segment pill, which is painted in --ink.
+  /*
+   * The veil at the top and bottom edges.
+   *
+   * The controls used to sit on frosted lozenges, which guaranteed a known
+   * backdrop behind every label. Drawing them as bare text over the world
+   * looks far better and removes that guarantee: the ground is cream in one
+   * palette and near-black in another, and a label can cross a bright rim as
+   * you roll.
+   *
+   * A gradient at the edges fixes it without putting a shape back. It is
+   * invisible as an object — nobody reads a vignette as a panel — but the text
+   * always has something known behind it, so the contrast is a number rather
+   * than a hope.
+   */
+  root.setProperty("--veil", light ? "rgba(250,247,240,.94)" : "rgba(3,5,10,.9)");
   root.setProperty("--scrim-ink", light ? "#f6f2e8" : "#11141a");
   root.setProperty("--glass", light ? "rgba(255,253,247,.55)" : "rgba(16,20,28,.5)");
   root.setProperty("--glass-line", light ? "rgba(58,54,48,.16)" : "rgba(255,255,255,.14)");
@@ -292,7 +306,7 @@ const palBar = document.getElementById("pal");
 if (palBar) {
   const segBg = palBar.querySelector(".seg-bg");
 
-  // Park the sliding pill under the active button. Measured rather than
+  // Park the sliding mark under the active label. Measured rather than
   // hardcoded, because the labels are different widths and the breakpoint
   // changes the padding.
   function placeSeg() {

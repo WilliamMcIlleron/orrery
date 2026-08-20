@@ -364,6 +364,67 @@ the craters on the moon.
 The collider is sized to the furthest lump the jitter produced rather than to
 the nominal radius, so the marble never rolls through a corner that stuck out.
 
+### The chrome is an instrument, not an interface
+
+The overlay was frosted lozenges: a glass pill for the palette with a capsule
+sliding behind the live label, a glass disc for jump, a glass capsule around
+the hint, and rounded speech bubbles with little nibs for the labels. Every one
+of those is a perfectly good control and every one of them ships in every
+component library written since 2019. The world does not look like anything
+else; the chrome looked like everything else, and it is a third of the frame.
+
+An orrery is a brass instrument covered in engraved scales, which is a better
+place to take the chrome from than a component library — and unlike a taste
+profile, it comes from the subject rather than from someone else's product.
+
+- The palette is a **scale**: four labels tracked out along a hairline rule
+  with minor ticks, and one heavy mark that slides under the live one. Still a
+  single moving element rather than four fading backgrounds, for the original
+  reason — one object moving reads as one control.
+- Jump is a **drawn bezel**: a ring with a second scribe line inside it, no
+  fill and no blur.
+- The hint is just text.
+- The marker is an **annotation**, not a tooltip: a squared plate with a
+  hairline leader dropping to a small open circle exactly where the monument
+  is. The nib made it a speech bubble, and a speech bubble is something that
+  explains an interface.
+
+Panels that carry text over unpredictable terrain keep their scrim, because
+only a scrim survives cream ground and near-black ground in the same session.
+That is the marker, the beacons and the intro card, and nothing else.
+
+### The veil, and why the contrast is a number
+
+Drawing the controls as bare text over the world removes the one thing the
+frosted lozenges were actually good for: a known backdrop. The ground is cream
+in one palette and near-black in another, and a label crosses a bright rim as
+you roll.
+
+So there is a gradient at the top and bottom edges, under every control and
+over the canvas. Nobody reads a vignette as a panel, but the text always has
+something known behind it — which turns the contrast from a hope into a
+measurement.
+
+Measured on the built page, compositing each label's resolved colour and
+opacity over the actual rendered backdrop, in the worst spot each palette has:
+
+| | Deep field | Dusk | Playground | Riso |
+|---|---|---|---|---|
+| palette, inactive | 7.9 | 7.2 | **4.7** | 5.0 |
+| palette, live | 12.0 | 10.4 | 7.7 | 9.1 |
+| hint | 9.9 | 7.7 | 6.1 | 7.4 |
+| jump | 9.5 | 8.1 | 5.8 | 6.7 |
+| brand | 9.4 | 9.3 | 6.1 | 6.2 |
+
+AA for text this size is 4.5:1, so the worst case clears it by a little and
+most of it clears it by a lot. Before the veil the same table had four entries
+under 4.5 and the jump label at **1.78** in Playground — a failure that
+predated the redesign and would never have been found by looking, because the
+palette anyone tests in is the dark one where it passes.
+
+Jump sits higher than the rest of the chrome, above the edge veil, so it has
+its own radial pool of shade. That is the difference between 3.25 and 5.8.
+
 ### The world is seeded
 
 `mulberry32` with a fixed seed, so the planet is byte-for-byte identical on
@@ -406,7 +467,8 @@ planets, and a bug you saw once might never come back.
   choosing a colour. Both handlers bail out when the event came from a button
   or a link.
 - `focus-visible` outlines on every control, 40px minimum on every control at
-  every breakpoint. The narrow layout buys its space by shedding horizontal
+  every breakpoint, and **every label measured against AA in all four
+  palettes** — see the table above, worst case 4.7:1. The narrow layout buys its space by shedding horizontal
   padding rather than height, which is the one dimension that is not ours to
   trade.
 - **Zoom is not blocked.** `user-scalable=no` is the reflex for a full-screen
