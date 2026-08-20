@@ -144,6 +144,13 @@ someone looks at for forty seconds.
   is written next to the impact it describes, and a boulder struck on the way
   down clears it, because a rock is not a floor.
 - **Chimes** are two sine partials climbing a pentatonic run, one per monument.
+- **Worked stone** — arch blocks and standing stones — is the boulder knock
+  tightened: a narrower, higher, more resonant band so it cracks rather than
+  thuds, with a short low partial under it for mass. It also accepts much
+  quieter contacts than a boulder does, because an arch leg is half a unit
+  across and most of what you do to one is clip it in passing. Under the
+  boulder's threshold that was silent, and the arches read as scenery you
+  could not touch.
 - **Crystals** ring on three partials at 1, 2.76 and 5.4 — a stretched,
   inharmonic series, which is roughly what a struck bar does and what a
   harmonic series conspicuously does not. Harmonic partials sound like an
@@ -424,6 +431,36 @@ palette anyone tests in is the dark one where it passes.
 
 Jump sits higher than the rest of the chrome, above the edge veil, so it has
 its own radial pool of shade. That is the difference between 3.25 and 5.8.
+
+### The ending had no way out
+
+The design was: light all four, the beacons come up and label every monument
+permanently, and the proximity marker stands down because it would be a second
+card for the pillar you are standing at.
+
+The beacons are not permanent. They are culled by the same exact horizon test
+the wayfinder uses, and again by whether the pillar is in front of the camera,
+so on a planet this small you can normally see one of the four and only while
+facing it. Measured at the end of a finished run: **all four beacons at opacity
+0 and pointer-events none**, and the marker switched off. Completing the piece
+could leave you unable to open anything at all, which is the exact opposite of
+what the ending is for.
+
+Three changes, because one was not enough:
+
+- The marker stays live after dawn. The duplicate is solved from the other
+  end — the beacon for whichever monument the marker is showing steps aside.
+- The marker rebuilds when a monument's *lit state* changes, not only when the
+  monument does. It used to bail on `focused === m` alone, so lighting a pillar
+  while standing next to it left the plain name card up: same object, no
+  rebuild, no link. You had to roll out of range and back before the piece
+  would offer you what you had just earned.
+- **The progress row is the index.** Each pip gets its monument's href the
+  moment it lights, wrapped in a 40px target around the 9px dot. The row has
+  been on screen in the monuments' own colours from the first second and the
+  player has been reading it the whole way through; making it the way out
+  costs no new furniture. No href until lit, which also keeps it out of the
+  tab order until it means something.
 
 ### The world is seeded
 

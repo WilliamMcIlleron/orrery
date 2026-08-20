@@ -157,10 +157,33 @@ function buildProgress(total) {
   if (!progressEl) return;
   progressEl.textContent = "";
   for (let i = 0; i < total; i++) {
+    /*
+     * Each pip is an anchor, and gets its href the moment its monument lights.
+     *
+     * This is the reliable way out of the piece. The intended one is to stand
+     * at a pillar and use its marker, and that works — but it needs you to
+     * travel back to each of the four, and the beacons that were supposed to
+     * cover the rest are culled by the horizon most of the time.
+     *
+     * The row is already a legend the player has been reading all the way
+     * through, in the monuments' own colours, and it is on screen from the
+     * first second. Making it the index costs no new furniture at all.
+     *
+     * No href until lit, which also keeps it out of the tab order until it
+     * means something — an anchor without one is not focusable.
+     */
+    const link = document.createElement("a");
+    link.className = "pip-link";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
     const pip = document.createElement("span");
     pip.className = "pip";
     pip.style.color = `#${monuments[i].colour.toString(16).padStart(6, "0")}`;
-    progressEl.appendChild(pip);
+    const name = document.createElement("span");
+    name.className = "pip-name";
+    name.textContent = monuments[i].label;
+    link.append(pip, name);
+    progressEl.appendChild(link);
   }
 }
 
@@ -179,7 +202,16 @@ function renderProgress(lit, total) {
    * Read off `monuments[i].lit`, which Progression sets before it calls back,
    * so the row cannot drift out of step with the world it is describing.
    */
-  for (let i = 0; i < pips.length; i++) pips[i].classList.toggle("on", !!monuments[i].lit);
+  for (let i = 0; i < pips.length; i++) {
+    const m = monuments[i];
+    const link = pips[i];
+    link.querySelector(".pip").classList.toggle("on", !!m.lit);
+    if (m.lit && m.href) {
+      link.href = m.href;
+      link.setAttribute("aria-label", `Open ${m.label}`);
+      link.classList.add("on");
+    }
+  }
   progressEl.setAttribute("aria-label", `${lit} of ${total} monuments lit`);
 }
 
@@ -359,10 +391,23 @@ const _radial = new THREE.Vector3();
 
 /** The monument currently under the marker, or null. */
 let focused = null;
+/** Its lit state when the card was last built. */
+let focusedLit = false;
 
 function setMarker(m) {
-  if (focused === m) return;
+  /*
+   * Rebuild on a change of monument *or* of its lit state.
+   *
+   * This used to bail on `focused === m` alone, which meant that lighting a
+   * monument while standing next to it left the plain name card up: the same
+   * object, so no rebuild, so no link. You had to roll out of range and back
+   * in before the piece would offer you the thing you had just earned. It read
+   * as the link taking a long time to appear, and it was in fact never going
+   * to appear until you left.
+   */
+  if (focused === m && focusedLit === !!m?.lit) return;
   focused = m;
+  focusedLit = !!m?.lit;
   if (!m) return;
 
   if (m.lit && m.href) {
@@ -383,15 +428,24 @@ function setMarker(m) {
 function updateMarker() {
   if (!markerEl) return;
 
-  // Once the beacons are up they label every monument permanently, so the
-  // proximity marker is showing a second card for the pillar you are already
-  // standing next to. Stand down.
-  if (beacons.active) {
-    markerEl.style.opacity = "0";
-    markerEl.classList.remove("shown");
-    focused = null;
-    return;
-  }
+  /*
+   * The marker keeps working after dawn.
+   *
+   * It used to stand down here, on the theory that the beacons label every
+   * monument permanently and a proximity card would be a second label for the
+   * pillar you are already next to.
+   *
+   * The beacons are not permanent. They are culled by the same exact horizon
+   * test the wayfinder uses, and again by whether the pillar is in front of
+   * the camera, so on a planet this small you can normally see one of the four
+   * and only when facing it. Measured at the end of a finished run: all four
+   * beacons at opacity 0 and pointer-events none. Completing the piece could
+   * leave you with no way to open anything, which is the exact opposite of
+   * what the ending is for.
+   *
+   * So the marker stays, and the duplicate is solved from the other end — the
+   * beacon for whichever monument the marker is currently showing steps aside.
+   */
   let best = null;
   let bestD = LABEL_RANGE;
   for (const m of monuments) {
@@ -579,7 +633,8 @@ function frame(now) {
     if (struck?.kind === "crystal") {
       audio.crystal(hit, struck.cluster);
       ringCluster(crystalClusters, struck.cluster, hit);
-    } else if (marble.landed) audio.land(hit);
+    } else if (struck?.kind === "stone") audio.stone(hit);
+    else if (marble.landed) audio.land(hit);
     else audio.knock(hit);
     marble.squashOnLanding(hit);
     // Only genuinely hard landings freeze. Every knock doing it would make
@@ -593,6 +648,9 @@ function frame(now) {
   handles.aimShadow(marble.pos);
 
   chase.update(marble.pos, marble.vel, wall, marble.speed);
+  // The marker owns the pillar you are standing at; its beacon steps aside so
+  // there are never two labels on one monument.
+  beacons.suppress = focused;
   updateMarker();
   post.render(now * 0.001);
 

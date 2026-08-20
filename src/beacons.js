@@ -28,6 +28,13 @@ export class Beacons {
     this.active = false;
     /** The beacon currently holding keyboard focus, if any. */
     this.focused = null;
+    /**
+     * A monument whose label the proximity marker is currently showing.
+     *
+     * Set from the frame loop. Its beacon hides, so a pillar you are standing
+     * at never carries two labels at once.
+     */
+    this.suppress = null;
 
     for (const m of monuments) {
       const el = document.createElement("a");
@@ -79,6 +86,12 @@ export class Beacons {
     if (!this.active) return;
 
     for (const { m, el } of this.items) {
+      if (m === this.suppress && el !== this.focused) {
+        el.style.opacity = "0";
+        el.style.pointerEvents = "none";
+        continue;
+      }
+
       // A pinned label is being read. Leave it where it is.
       if (el === this.focused) {
         el.style.opacity = "1";

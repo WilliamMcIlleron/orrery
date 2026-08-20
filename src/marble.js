@@ -257,9 +257,15 @@ export class Marble {
       pos.addScaledVector(_n, minD - d);
       const vn = vel.dot(_n);
       if (vn < 0) {
-        // Rocks get a lower threshold than the ground: hitting one is an
-        // event, whereas resting on the ground is the default state.
-        if (-vn > 0.8 && -vn > this.impact) {
+        /*
+         * Rocks get a lower threshold than the ground: hitting one is an
+         * event, whereas resting on the ground is the default state. Worked
+         * stone gets a lower one again, because an arch leg is half a unit
+         * across and most contacts with one are glancing — at the boulder
+         * threshold the arches were silent to touch and read as scenery.
+         */
+        const min = c.minImpact ?? 0.8;
+        if (-vn > min && -vn > this.impact) {
           this.impact = -vn;
           // A rock is never a landing, and capsules resolve after the ground
           // in the same step. Without this, hitting a boulder on the way down

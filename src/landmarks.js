@@ -151,6 +151,7 @@ function stoneCircle(scene, mat, dir, rand, capsules, out) {
       b: foot.clone().addScaledVector(lean, h),
       r: w * 1.1,
       kind: "stone",
+      minImpact: 0.35,
     });
   }
   addMerged(scene, parts, mat);
@@ -206,7 +207,10 @@ function arch(scene, mat, dir, rand, capsules, out) {
       mid,
       new THREE.Quaternion().setFromUnitVectors(UP_Y, b.clone().sub(a).normalize()),
     );
-    capsules.push({ a: a.clone(), b: b.clone(), r: thick, kind: "stone" });
+    // The collider follows the taper. It used to be the untapered thickness,
+    // which is wider than the block near the crown — you could bounce off the
+    // air above an arch — and narrower than the block's corners at the feet.
+    capsules.push({ a: a.clone(), b: b.clone(), r: thick * taper * 1.2, kind: "stone", minImpact: 0.35 });
   }
   addMerged(scene, parts, mat);
   out.push({ pos: centre, clearance: span + 2.2 });

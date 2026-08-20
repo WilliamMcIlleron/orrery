@@ -260,14 +260,63 @@ body::after {
 #progress {
   position: fixed;
   z-index: 6;
-  top: max(18px, env(safe-area-inset-top));
+  /* Pulled up by the pips' own padding, so the dots stay on the same line
+     they were on before they grew a 40px hit area around them. */
+  top: calc(max(18px, env(safe-area-inset-top)) - 15px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
+  gap: 0;
   align-items: center;
   pointer-events: none;
 }
+
+/*
+ * A 40px target around a 9px dot.
+ *
+ * The dot is the right size to read as a row of pips; 9px is not a control
+ * anybody can hit. Padding gives it the target without changing the drawing,
+ * which is the usual answer and the right one here.
+ */
+#progress .pip-link {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  position: relative;
+  text-decoration: none;
+  color: inherit;
+  /* Not clickable until it is a link. Until then the row is a readout. */
+  pointer-events: none;
+}
+#progress .pip-link.on {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* The project name, on hover or focus only. The row is a readout first. */
+#progress .pip-name {
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  white-space: nowrap;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-shadow: var(--ink-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--fast), transform var(--fast);
+}
+#progress .pip-link.on:hover .pip-name,
+#progress .pip-link.on:focus-visible .pip-name {
+  opacity: 0.95;
+  transform: translateX(-50%) translateY(0);
+}
+#progress .pip-link.on:hover .pip,
+#progress .pip-link.on:focus-visible .pip { transform: scale(1.45); }
 
 #progress .pip {
   width: 9px;

@@ -45,6 +45,9 @@ const SEND = {
   // it is ringing into the space around it, which is the whole reason to have
   // put one on a planet with nothing else on it.
   crystal: 0.62,
+  // Worked stone in the open rings more than a boulder does and much less than
+  // a crystal. It is the middle of the three on purpose.
+  stone: 0.34,
 };
 
 function readStoredMute() {
@@ -402,6 +405,70 @@ export class Audio {
     this._route(g, SEND.jump);
     osc.start(t);
     osc.stop(t + 0.25);
+  }
+
+  /**
+   * Worked stone: an arch block or a standing stone.
+   *
+   * A boulder and a dressed block are not the same material and should not
+   * make the same noise. The boulder knock is a wide noise burst through a
+   * gentle bandpass — dull, granular, right for something weathered. This is
+   * the same idea tightened: a narrower, higher, more resonant band so it
+   * cracks rather than thuds, with a short low partial under it for mass.
+   *
+   * It also takes quieter contacts than the boulder does. An arch leg is
+   * half a unit across and most of what you do to one is clip it in passing,
+   * which under the boulder's threshold was completely silent — the arches
+   * read as scenery you could not touch.
+   */
+  stone(strength) {
+    if (!this.ready || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    if (t - (this._lastStone ?? -1) < 0.05) return;
+    this._lastStone = t;
+
+    const amp = Math.min(1, strength / 10);
+    if (amp < 0.02) return;
+
+    const len = 0.1;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      // Steeper decay than the boulder's: stone stops sooner.
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 9);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(760 + amp * 900, t);
+    // Resonant, which is what turns a thud into a crack.
+    bp.Q.setValueAtTime(4.5, t);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(Math.min(0.5, 0.1 + amp * 0.36), t);
+
+    src.connect(bp).connect(g);
+    this._route(g, SEND.stone);
+    src.start(t);
+
+    // A short body underneath, so a heavy hit has weight and a graze does not.
+    if (amp > 0.16) {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(210 + amp * 90, t);
+      osc.frequency.exponentialRampToValueAtTime(120, t + 0.07);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0, t);
+      og.gain.linearRampToValueAtTime(amp * 0.13, t + 0.004);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      osc.connect(og);
+      this._route(og, SEND.stone);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    }
   }
 
   /**
