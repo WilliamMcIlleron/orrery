@@ -4,6 +4,7 @@ import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./pale
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
 import { fadeClusters, ringCluster } from "./landmarks.js";
+import { readBest, submit, formatTime } from "./records.js";
 import { Input, isControlTarget } from "./input.js";
 import { Marble } from "./marble.js";
 import { ChaseCamera } from "./chase-camera.js";
@@ -223,6 +224,26 @@ const againBtn = document.getElementById("again");
 
 /** Wall-clock ms at first input. The run is timed from when you took over. */
 let runStart = 0;
+/** Seconds, or null on a first ever visit. */
+const bestBefore = readBest();
+/** True once the run is over, so the clock stops rather than freezing by luck. */
+let runDone = false;
+/** How many crystal clusters have been rung this run. */
+const rung = new Set();
+
+/*
+ * The clock runs from the second visit onward.
+ *
+ * Someone seeing this for the first time should get to wander, find things and
+ * be surprised by dawn. A timer ticking in the corner turns all of that into a
+ * task. Once there is a best time there is something to beat, and that is the
+ * point at which a clock is an invitation rather than a demand.
+ */
+const timed = bestBefore !== null;
+if (timed && clockEl) {
+  clockEl.textContent = `best ${formatTime(bestBefore)}`;
+  clockEl.classList.add("on", "idle");
+}
 
 if (againBtn) {
   // Same palette, same seeded world, fresh run. Reload rather than a reset
@@ -251,10 +272,21 @@ const progression = new Progression(monuments, {
      */
     beacons.reveal();
 
+    runDone = true;
     if (clockEl && runStart) {
       const secs = (performance.now() - runStart) / 1000;
-      clockEl.textContent = `${secs.toFixed(1)}s`;
+      const { best, improved } = submit(secs);
+      clockEl.classList.remove("idle");
       clockEl.classList.add("on");
+      clockEl.classList.toggle("record", improved && bestBefore !== null);
+      // The crystals are optional and never asked for, so they are reported
+      // rather than scored — a note about what you found, not a target missed.
+      const found = rung.size
+        ? `  ·  ${rung.size}/${crystalClusters.length} crystals`
+        : "";
+      clockEl.textContent = improved && bestBefore !== null
+        ? `${formatTime(secs)}  ·  best${found}`
+        : `${formatTime(secs)}${best !== null && best < secs ? `  ·  best ${formatTime(best)}` : ""}${found}`;
     }
     if (againBtn) againBtn.hidden = false;
 
@@ -625,6 +657,13 @@ function frame(now) {
   audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded, slope);
   fadeClusters(crystalClusters, wall);
 
+  // The live clock. Only while timed, only once you have taken over, and it
+  // stops the moment the run ends rather than being left to freeze by luck.
+  if (timed && !runDone && runStart && clockEl) {
+    clockEl.classList.remove("idle");
+    clockEl.textContent = formatTime((now - runStart) / 1000);
+  }
+
   const hit = marble.takeImpact();
   if (hit) {
     const struck = marble.hitCapsule;
@@ -635,6 +674,7 @@ function frame(now) {
     if (struck?.kind === "crystal") {
       audio.crystal(hit, struck.cluster);
       ringCluster(crystalClusters, struck.cluster, hit);
+      rung.add(struck.cluster);
     } else if (struck?.kind === "stone") audio.stone(hit);
     else if (marble.landed) audio.land(hit);
     else audio.knock(hit);

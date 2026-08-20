@@ -821,6 +821,18 @@ body::after {
 }
 
 #clock.on { opacity: 0.8; }
+/* A standing best, before the run starts. Present, not insistent. */
+#clock.idle { opacity: 0.45; color: var(--ink); }
+/*
+ * A new best. The only celebratory thing in the piece, and it is one word and
+ * a colour — anything more would be a badge, and a badge would be the first
+ * thing here that treats the player as someone to be rewarded rather than
+ * someone to be shown something.
+ */
+#clock.record {
+  opacity: 1;
+  letter-spacing: 0.3em;
+}
 
 #again {
   position: fixed;

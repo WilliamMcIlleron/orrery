@@ -536,6 +536,40 @@ The offset is built as a vector and rotated, rather than as a height and a
 distance added separately, which is what keeps the marble the same size in
 frame as the view swings up and over it.
 
+### The challenge was already in the geometry
+
+The piece had none. You found four monuments, dawn broke, and the run time
+appeared once at the end as a fact about what had happened rather than as
+anything you could do something about.
+
+Nothing had to be invented to fix that. The planet is fourteen seconds around
+and there are four points on it, so choosing a route is already an
+optimisation problem — it simply was not worth solving, because nothing was
+counting. The whole addition is a clock and a stored best.
+
+Two restraints, and they are the design:
+
+**The clock does not run on a first visit.** Someone seeing this for the first
+time should get to wander, find things and be surprised by dawn, and a timer
+ticking in the corner turns all of that into a task. It appears from the second
+run onward — once you have a best, you have something to beat, and that is the
+point at which a clock is an invitation rather than a demand.
+
+**There is no fail state, no par time and nothing to lose.** The clock is a
+reason to go round again, not a hurdle in front of the thing you came for. A
+new best is one word and a letter-spacing change; anything more would be a
+badge, and a badge would be the first thing here that treats the player as
+someone to be rewarded rather than someone to be shown something.
+
+The crystal clusters are counted the same way — reported at the end as what you
+found rather than scored as a target you missed. They are never mentioned
+beforehand, so finding six of them is a thing you did rather than a list you
+completed.
+
+Measured across a first and second visit: first run shows no clock at all until
+the end, then `8.9s · 1/6 crystals`; second run opens on `best 8.9s`, ticks
+live, and finishes `8.7s · best`.
+
 ### The world is seeded
 
 `mulberry32` with a fixed seed, so the planet is byte-for-byte identical on
@@ -644,6 +678,9 @@ visual identity. Noted here so it does not get proposed again.
 - **Dust off the marble at speed.** The trail is not coming back — see above.
 - **The overlay is still generic.** The world looks designed and the chrome
   looks installed, and the chrome is a third of every frame.
+- **A leaderboard would be the wrong shape.** The best time is local and stays
+  local. A global board would need a backend, and it would turn a thing you
+  send someone into a thing you compete in.
 - **More than four monuments**, once there is more worth putting on the planet.
 
 ## Credits
