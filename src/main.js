@@ -167,7 +167,19 @@ function buildProgress(total) {
 function renderProgress(lit, total) {
   if (!progressEl) return;
   const pips = progressEl.children;
-  for (let i = 0; i < pips.length; i++) pips[i].classList.toggle("on", i < lit);
+  /*
+   * Which pip, not how many.
+   *
+   * This used to light `i < lit`, which fills the row left to right in the
+   * order you happened to arrive. Every pip already carries its own monument's
+   * accent, so lighting the third monument turned on the *first* pip and the
+   * row showed a colour that was nowhere on the horizon — the legend pointed
+   * at the wrong thing, which is worse than no legend.
+   *
+   * Read off `monuments[i].lit`, which Progression sets before it calls back,
+   * so the row cannot drift out of step with the world it is describing.
+   */
+  for (let i = 0; i < pips.length; i++) pips[i].classList.toggle("on", !!monuments[i].lit);
   progressEl.setAttribute("aria-label", `${lit} of ${total} monuments lit`);
 }
 

@@ -443,6 +443,15 @@ planets, and a bug you saw once might never come back.
   in Riso, where cream ground under a white sun produces almost no shading of
   its own and the terrain would otherwise vanish — taking with it the ability
   to perceive your own speed, which is the entire reason the relief exists.
+- **The progress row is a legend, not a counter.** Each pip carries its own
+  monument's accent, so the one that just lit is the same colour as the beam
+  now standing on the horizon. That only works if the pip that lights is the
+  pip that belongs to the monument — it used to fill left to right in arrival
+  order, so lighting the third monument turned on the first pip and the row
+  pointed at a colour that was nowhere in the world. A legend that points at
+  the wrong thing is worse than no legend. It now reads each monument's own
+  state, which `Progression` sets before it calls back, so the two cannot
+  drift apart.
 - **The overlay picks its ink from the background's luminance.** Two palettes
   are nearly black and two nearly white; pale grey text worked until it did
   not.
