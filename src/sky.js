@@ -5,10 +5,10 @@ import { SUN_DIR } from "./config.js";
 /**
  * The rest of the system.
  *
- * The piece is called orrery and until now nothing in it was in orbit around
- * anything. There was one planet, and above it an empty sky — which is also
- * why so many frames were half ground and half nothing: the chase camera sits
- * low, the horizon lands near the middle, and the upper half had no subject.
+ * A syzygy is three bodies sharing one line, and until this there were not
+ * three bodies. There was one planet under an empty sky — which is also why so
+ * many frames were half ground and half nothing: the chase camera sits low,
+ * the horizon lands near the middle, and the upper half had no subject in it.
  *
  * Two bodies fix both at once. They are fixed in world space, not attached to
  * the camera, so rolling around the planet makes them rise and set. That turns

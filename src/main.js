@@ -731,7 +731,7 @@ addEventListener("resize", () => {
 // planet takes fifteen seconds of rolling, which is a slow way to check that
 // dawn works. `?dev` lets a test put the marble where it needs to be.
 if (location.search.includes("dev")) {
-  window.__orrery = {
+  window.__syzygy = {
     marble, monuments, progression, audio, scene, renderer, handles, P, crystalClusters,
     camera, chase, wayfinder, capsules, post, atmosphere,
     /** Drop the marble next to monument `i`, on the surface. */

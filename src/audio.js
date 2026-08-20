@@ -23,7 +23,7 @@
  */
 
 const MASTER = 0.9;
-const STORE_KEY = "orrery.sound";
+const STORE_KEY = "syzygy.sound";
 
 /** A pentatonic run. Any four of these in order sound like progress. */
 const CHIME_HZ = [329.63, 392.0, 493.88, 587.33, 783.99];

@@ -23,7 +23,7 @@
  * reason to go round again, not a hurdle in front of the thing you came for.
  */
 
-const KEY = "orrery.best.v1";
+const KEY = "syzygy.best.v1";
 
 /** @returns {number|null} best time in seconds, or null if there is none. */
 export function readBest() {

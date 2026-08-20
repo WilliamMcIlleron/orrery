@@ -115,11 +115,12 @@ body::after {
  * scrim does that reliably. Those keep the frosted glass.
  *
  * Everything else — the controls — is drawn rather than filled: hairlines,
- * rings and tick marks. An orrery is a brass instrument covered in engraved
- * scales, and that is a better place to get the chrome from than the frosted
- * lozenge every component library has shipped since 2019. It also puts far
- * less opaque furniture between the viewer and the world, which is the thing
- * they came for.
+ * rings and tick marks — the drawing on an astronomical almanac, which is
+ * what you would have used to predict a syzygy before you could compute one.
+ * That is a better place to get the chrome from than the frosted lozenge every
+ * component library has shipped since 2019, and it puts far less opaque
+ * furniture between the viewer and the world, which is the thing they came
+ * for.
  */
 .glass,
 /*
@@ -520,9 +521,9 @@ body::after {
  * the chrome did, and it is a third of the frame.
  *
  * So: four labels tracked out along a hairline rule, with a mark that slides
- * under the live one. An orrery is a brass instrument covered in engraved
- * scales, and that is where this comes from rather than from a profile in the
- * design library.
+ * under the live one. Almanacs and ephemerides are pages of engraved scales
+ * and ruled tables, and that is where this comes from rather than from a
+ * profile in the design library.
  *
  * The moving mark is still a single element that slides rather than four that
  * fade, for the original reason — one object moving reads as one control,

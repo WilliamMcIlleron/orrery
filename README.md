@@ -1,6 +1,12 @@
-# Orrery
+# Syzygy
 
 A small world you roll a marble around, in the browser.
+
+A syzygy is three bodies on one line. There are three here — the planet under
+your feet, a cratered moon, and a ringed companion further out — all lit by one
+sun, so the moon carries the same phase as the ground you are standing on. The
+piece was called *orrery* while it was one planet in an empty sky. It stopped
+being that.
 
 Gravity points at the centre of the planet rather than downwards, so there is
 no floor and no edge. Roll in one direction for about fourteen seconds and you
@@ -429,9 +435,11 @@ of those is a perfectly good control and every one of them ships in every
 component library written since 2019. The world does not look like anything
 else; the chrome looked like everything else, and it is a third of the frame.
 
-An orrery is a brass instrument covered in engraved scales, which is a better
-place to take the chrome from than a component library — and unlike a taste
-profile, it comes from the subject rather than from someone else's product.
+Almanacs and ephemerides — the printed tables you would have used to predict a
+syzygy before you could compute one — are pages of engraved scales and ruled
+rows. That is a better place to take the chrome from than a component library,
+and unlike a taste profile it comes from the subject rather than from someone
+else's product.
 
 - The palette is a **scale**: four labels tracked out along a hairline rule
   with minor ticks, and one heavy mark that slides under the live one. Still a
@@ -645,7 +653,7 @@ planets, and a bug you saw once might never come back.
 
 ## Development
 
-`?dev` on the URL exposes `window.__orrery` with the marble, the monuments and
+`?dev` on the URL exposes `window.__syzygy` with the marble, the monuments and
 a `warpTo(i)` helper. Reaching a monument on the far side of the planet takes
 fifteen seconds of rolling, which is a slow way to check that dawn still works.
 It does not exist without the flag.
