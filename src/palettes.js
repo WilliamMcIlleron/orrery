@@ -15,7 +15,8 @@ import * as THREE from "three";
  */
 
 /** Fields interpolated as colours. */
-const COLOUR_KEYS = ["bg", "ground", "rock", "monument", "hemiSky", "hemiGround", "sun", "band", "atmoColor"];
+const COLOUR_KEYS = ["bg", "ground", "rock", "monument", "hemiSky", "hemiGround", "sun", "band", "atmoColor",
+  "moon", "companion", "ring", "crystal"];
 
 /** Fields interpolated as plain numbers. */
 const NUMBER_KEYS = [
@@ -44,12 +45,14 @@ export const PALETTES = {
     accents: [0xff6b4a, 0xffc23d, 0x4aa3e8, 0x9b6bd6],
     hemiSky: 0xcdeeff, hemiGround: 0x6fae7a, hemiInt: 2.5,
     sun: 0xfff6e0, sunInt: 2.4,
+    moon: 0xf6f2e6, companion: 0xe8b7a0, ring: 0xffffff, crystal: 0xff6b4a,
     lamp: false, lampInt: 0,
     stars: 0, exposure: 1.05, band: 0x6fae7a, bandOp: 0.25,
     // A world that was never dark cannot have a sunrise. It gets golden hour
     // instead: lower, warmer, richer. Overselling it would look like a bug.
     dawn: {
       bg: 0xf3c88d, ground: 0x9ed684, sun: 0xffd9a0, sunInt: 3.0,
+      moon: 0xfff0d4, companion: 0xf3c2a4, ring: 0xffe9cf,
       hemiSky: 0xffe3bd, hemiInt: 2.7, exposure: 1.2, fogFar: 210,
       atmoColor: 0xffd7a1, atmoInt: 0.9, bloomStrength: 0.42,
     },
@@ -76,6 +79,7 @@ export const PALETTES = {
     accents: [0xffb03a, 0x5fb8ff, 0x66e0a8, 0xff7aa8],
     hemiSky: 0x8fa8cc, hemiGround: 0x1c222c, hemiInt: 1.4,
     sun: 0xdce8ff, sunInt: 2.0,
+    moon: 0xc3ccdb, companion: 0x5d6b86, ring: 0x93a6c6, crystal: 0x5fb8ff,
     lamp: 0xcfe0ff, lampInt: 15,
     stars: 0.75, exposure: 1.35, band: 0x5f7a6d, bandOp: 0.3,
     // The payoff. Night to warm terracotta morning: the stars go out, the sun
@@ -84,6 +88,7 @@ export const PALETTES = {
       bg: 0x2a1c2e, ground: 0xb0785f, rock: 0x8a6357, monument: 0x4a3830,
       hemiSky: 0xffb37a, hemiGround: 0x33222a, hemiInt: 1.9,
       sun: 0xffb877, sunInt: 3.1,
+      moon: 0xffd9b8, companion: 0x8f6f74, ring: 0xd8b39c,
       stars: 0.06, exposure: 1.28, band: 0xffb37a, bandOp: 0.22,
       lampInt: 3.5, fogFar: 170,
       atmoColor: 0xffa463, atmoInt: 1.6, bloomStrength: 1.15,
@@ -110,11 +115,13 @@ export const PALETTES = {
     accents: [0x4ecdc4, 0xffd166, 0xef476f, 0x8ecae6],
     hemiSky: 0xffb37a, hemiGround: 0x2a1a20, hemiInt: 1.5,
     sun: 0xffa961, sunInt: 2.8,
+    moon: 0xffd9bb, companion: 0x8a5f6b, ring: 0xd6a58f, crystal: 0x4ecdc4,
     lamp: 0xffd9b0, lampInt: 15,
     stars: 0.45, exposure: 1.3, band: 0xffb37a, bandOp: 0.22,
     dawn: {
       bg: 0x6d4a52, ground: 0xdb9a66, rock: 0xa9705a,
       hemiSky: 0xffd9a8, hemiInt: 2.1, sun: 0xffd6a0, sunInt: 3.4,
+      moon: 0xfff0dc, companion: 0xb08677, ring: 0xf0cbb0,
       stars: 0.0, exposure: 1.24, lampInt: 3, fogFar: 175,
       atmoColor: 0xffc27a, atmoInt: 1.5, bloomStrength: 1.1,
     },
@@ -144,11 +151,14 @@ export const PALETTES = {
     accents: [0xe0503a, 0x2f5d7c, 0x3f7d5c, 0xd9a520],
     hemiSky: 0xffffff, hemiGround: 0xd8cfbc, hemiInt: 2.7,
     sun: 0xffffff, sunInt: 1.5,
+    // Two inks and the paper, which is all a riso print gets.
+    moon: 0xe6dcc6, companion: 0xe0503a, ring: 0x2f5d7c, crystal: 0x3f7d5c,
     lamp: false, lampInt: 0,
     stars: 0, exposure: 1.0, band: 0x9a8f78, bandOp: 0.35,
     // A print does not have weather. The paper warms and the ink deepens.
     dawn: {
       bg: 0xf7e3c4, ground: 0xe8d9b8, rock: 0xc4b092,
+      moon: 0xf0e6cf, companion: 0xd9452f,
       hemiSky: 0xfff4e0, sunInt: 1.8, exposure: 1.08, bandOp: 0.45,
     },
   },

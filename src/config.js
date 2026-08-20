@@ -162,3 +162,12 @@ export const PLANET_DETAIL = 8;
  * the same world. 8 is the point where the horizon is a curve, the terrain
  * undulates, and a facet is still about the size of a facet on a boulder.
  */
+
+/**
+ * The direction the sunlight comes from, as a unit vector.
+ *
+ * Lives here because two things need to agree about it: the light itself, and
+ * the placement of the bodies in the sky, which are positioned by how lit they
+ * should look rather than by eye.
+ */
+export const SUN_DIR = Object.freeze({ x: 0.5569, y: 0.7425, z: 0.3713 });

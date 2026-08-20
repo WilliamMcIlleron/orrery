@@ -1,7 +1,8 @@
 import * as THREE from "three";
-import { R, RELIEF, WORLD_SEED, TOUCH_RANGE, PLANET_DETAIL } from "./config.js";
+import { R, RELIEF, WORLD_SEED, TOUCH_RANGE, PLANET_DETAIL, SUN_DIR as SUN_DIR_RAW } from "./config.js";
 import { addSurfaceNoise, makeSweep } from "./surface.js";
 import { makeBloomable } from "./postfx.js";
+import { createSky } from "./sky.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface, closestOnSegment } from "./geometry.js";
 
@@ -45,7 +46,7 @@ export function buildWorld(scene, P, content) {
    * artefact to ground you are standing on rather than spreading it over the
    * horizon.
    */
-  const SUN_DIR = new THREE.Vector3(60, 80, 40).normalize();
+  const SUN_DIR = new THREE.Vector3(SUN_DIR_RAW.x, SUN_DIR_RAW.y, SUN_DIR_RAW.z).normalize();
   const SUN_DIST = 90;
   const SHADOW_HALF = 16;
 
@@ -404,6 +405,9 @@ export function buildWorld(scene, P, content) {
     });
   });
 
+  /* ---- the rest of the system ---- */
+  const sky = createSky(scene, P);
+
   /* ---- boulders ---- */
   const rockMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -513,7 +517,10 @@ export function buildWorld(scene, P, content) {
     capsules,
     monuments,
     lamp,
-    handles: { sun, aimShadow, hemi, lamp, starMat, planetMat, rockMat, monumentMat, sweep },
+    handles: {
+      sun, aimShadow, hemi, lamp, starMat, planetMat, rockMat, monumentMat, sweep,
+      moonMat: sky.moonMat, bodyMat: sky.bodyMat, ringMat: sky.ringMat,
+    },
   };
 }
 
@@ -543,5 +550,10 @@ export function applyPaletteState(scene, renderer, handles, state) {
   // planet at once and undo the effect entirely.
 
   if (handles.lamp) handles.lamp.intensity = state.lampInt;
+  // The sky bodies warm through dawn with everything else. They are lit by the
+  // same sun, so their shading already moves; this is only their albedo.
+  if (handles.moonMat) handles.moonMat.color.copy(state.moon);
+  if (handles.bodyMat) handles.bodyMat.color.copy(state.companion);
+  if (handles.ringMat) handles.ringMat.color.copy(state.ring);
   if (handles.starMat) handles.starMat.opacity = state.stars;
 }
