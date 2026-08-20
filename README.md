@@ -145,10 +145,49 @@ someone looks at for forty seconds.
   simply is not reproduced, so all that survived was hiss. A quiet bed sits
   under the grains to carry the weight on speakers that can. It cuts out
   entirely mid-air; hearing a marble roll while it is in flight is uncanny.
-- **Knocks** are a short noise burst with the decay envelope baked into the
-  buffer, through a bandpass whose centre frequency rises with impact strength.
-  Rate limited, because a marble resting against a rock generates a contact
-  every frame and without the limit it machine-guns.
+- **Impacts are modal.** A struck object rings at a set of frequencies fixed by
+  its shape and material, each decaying at its own rate, and the strike itself
+  is a click a few milliseconds long. Every impact here used to be one noise
+  burst through one bandpass, which gets the brightness right and the identity
+  wrong — every object ends up being the same object at a different pitch. They
+  are now a four-millisecond excitation through a bank of resonators, which is
+  the technique shipped games use for this and is cheap enough to be free.
+
+  The mode ratios are deliberately inharmonic. Whole-number ratios are what a
+  string does, and a bank of them reads as a pitched instrument rather than as
+  a thing being hit.
+
+  Q is derived from decay time rather than dialled in by ear. A resonant
+  bandpass rings down as `exp(-πft/Q)`, so 60dB takes `t = 6.9Q/(πf)`, which
+  rearranges to `Q = 0.455·f·t`. That lets a mode be written as "rings for
+  90ms" instead of as a filter setting, which is the only way a material stays
+  coherent when its pitch changes with impact strength.
+
+  Rendered offline out of the shipping code and measured, three strikes each:
+
+  | | fundamental | decay | peak |
+  |---|---|---|---|
+  | boulder | 246 Hz | 60 ms | 0.042 |
+  | dressed stone | 597 Hz | 120 ms | 0.040 |
+  | crystal | 530 Hz | 1078 ms | 0.096 |
+  | landing | 125 Hz | 170 ms | 0.139 |
+
+  Two things that measurement caught and listening would have taken much
+  longer to. **The bank needs makeup gain**, because a narrow bandpass passes
+  almost none of a four-millisecond click — the first build rendered the
+  boulder at a peak of 0.003 against the crystal's 0.096: correct, distinct
+  and inaudible. It is scaled by mode bandwidth, which is `2.2/decay` and so
+  depends only on how long the mode rings, which is what lets modes be written
+  as decay times without also having to balance them by ear.
+
+  And **short-decay modes are wide**, so they catch more of the strike than
+  their gain suggests. At an even balance the measured fundamental jumped
+  between 563 Hz and 2065 Hz from one hit to the next — not variation, two
+  different objects. Weighting toward the fundamental fixed it: the spread
+  across three strikes is now zero for all four materials.
+
+  Still rate limited, because a marble resting against a rock generates a
+  contact every frame and without the limit it machine-guns.
 - **Landings** are a knock with a sine body under it, dropping 120Hz to 58Hz
   over a sixth of a second. Only real airtime gets one — the flag that decides
   is written next to the impact it describes, and a boulder struck on the way

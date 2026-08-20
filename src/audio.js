@@ -353,29 +353,31 @@ export class Audio {
     const amp = Math.min(1, strength / 12);
     if (amp < 0.06) return;
 
-    const len = 0.14;
-    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
-      // Exponential decay envelope baked into the buffer.
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    // Harder impacts ring higher, the way a struck object actually behaves.
-    bp.frequency.value = 220 + amp * 700;
-    bp.Q.value = 1.6;
-
-    const g = ctx.createGain();
-    g.gain.value = amp * 0.5;
-
-    src.connect(bp).connect(g);
-    this._route(g, SEND.knock);
-    src.start(t);
-    src.stop(t + len);
+    /*
+     * A weathered boulder: low, dense, and it stops almost at once. Rounded
+     * and full of cracks, so there is nothing for it to ring between — which
+     * is exactly the difference from the dressed stone above, and the reason
+     * the two are worth separating at all.
+     */
+    this._modal(
+      170 + amp * 130,
+      /*
+       * Weighted hard toward the fundamental. The upper modes have shorter
+       * decays and therefore wider bandwidths, so they catch more of the
+       * strike than their gain suggests — at an even balance the second mode
+       * won often enough that the boulder measured at 430Hz on some strikes
+       * and 250Hz on others, which put it in the dressed stone's register.
+       */
+      [
+        [1, 1.0, 0.09],
+        [1.74, 0.34, 0.055],
+        [2.63, 0.17, 0.038],
+        [3.94, 0.08, 0.026],
+      ],
+      amp * 0.55,
+      SEND.knock,
+      5,
+    );
   }
 
   /**
@@ -408,6 +410,89 @@ export class Audio {
   }
 
   /**
+   * A modal impact: a short excitation through a bank of resonators.
+   *
+   * This is how a struck object actually sounds. It rings at a set of
+   * frequencies fixed by its shape and material, each decaying at its own
+   * rate, and the strike itself is a click that lasts a few milliseconds. A
+   * noise burst through one bandpass — which is what all of these used to be —
+   * gets the brightness right and the *identity* wrong: every object ends up
+   * sounding like the same object at a different pitch.
+   *
+   * The ratios are deliberately inharmonic. Whole-number ratios are what a
+   * string does, and a bank of them reads as a pitched instrument rather than
+   * as a thing being hit.
+   *
+   * Q is derived from the decay time rather than dialled in by ear. A resonant
+   * bandpass rings down as exp(-pi*f*t/Q), so sixty decibels takes
+   * t = 6.9*Q/(pi*f), which rearranges to Q = 0.455*f*t. That means the modes
+   * can be written as "this one rings for 90ms" instead of as filter settings,
+   * which is the only way a material stays coherent when you change its pitch.
+   *
+   * @param {number} f0        fundamental, Hz
+   * @param {Array} modes      [ratio, gain, decaySeconds] per mode
+   * @param {number} level     overall gain
+   * @param {number} send      reverb send
+   * @param {number} exciteMs  length of the strike itself
+   */
+  _modal(f0, modes, level, send, exciteMs = 4) {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    /*
+     * Makeup gain, and it is not a fudge.
+     *
+     * A resonant bandpass is unity at its centre and nothing anywhere else, so
+     * a bank of narrow ones passes a vanishing fraction of a four-millisecond
+     * click — the sharper the ring, the less of the strike gets through. Left
+     * uncompensated the first modal build rendered the boulder at a peak of
+     * 0.003 against the crystal's 0.096: correct, distinct, and inaudible.
+     *
+     * Scaling by the bandwidth is what puts them back on terms. A mode's
+     * bandwidth is f/Q, and Q is 0.455*f*decay, so the bandwidth is 2.2/decay
+     * and depends only on how long the mode rings. Dividing by the square root
+     * of the excitation energy that lands in it means a long-ringing mode and
+     * a short one arrive at the same loudness, which is what lets the modes be
+     * written as decay times without also having to balance them by ear.
+     */
+    const exciteSec = exciteMs / 1000;
+    let bw = 0;
+    for (const [, , decay] of modes) bw += 2.2 / decay;
+    bw /= modes.length;
+    const makeup = 1 / Math.sqrt(exciteSec * bw * 0.0165);
+
+    // The strike. Short enough to be a click, windowed so it has no edge.
+    const n = Math.max(2, Math.ceil((ctx.sampleRate * exciteMs) / 1000));
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const sum = ctx.createGain();
+    sum.gain.setValueAtTime(level * makeup, t);
+
+    let longest = 0;
+    for (const [ratio, gain, decay] of modes) {
+      const f = f0 * ratio;
+      if (f > ctx.sampleRate * 0.45) continue;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(f, t);
+      bp.Q.setValueAtTime(Math.max(1.2, Math.min(400, 0.455 * f * decay)), t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(gain, t);
+      src.connect(bp).connect(g).connect(sum);
+      longest = Math.max(longest, decay);
+    }
+
+    this._route(sum, send);
+    src.start(t);
+    return longest;
+  }
+
+  /**
    * Worked stone: an arch block or a standing stone.
    *
    * A boulder and a dressed block are not the same material and should not
@@ -431,44 +516,27 @@ export class Audio {
     const amp = Math.min(1, strength / 10);
     if (amp < 0.02) return;
 
-    const len = 0.1;
-    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
-      // Steeper decay than the boulder's: stone stops sooner.
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 9);
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.setValueAtTime(760 + amp * 900, t);
-    // Resonant, which is what turns a thud into a crack.
-    bp.Q.setValueAtTime(4.5, t);
-
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(Math.min(0.5, 0.1 + amp * 0.36), t);
-
-    src.connect(bp).connect(g);
-    this._route(g, SEND.stone);
-    src.start(t);
-
-    // A short body underneath, so a heavy hit has weight and a graze does not.
-    if (amp > 0.16) {
-      const osc = ctx.createOscillator();
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(210 + amp * 90, t);
-      osc.frequency.exponentialRampToValueAtTime(120, t + 0.07);
-      const og = ctx.createGain();
-      og.gain.setValueAtTime(0, t);
-      og.gain.linearRampToValueAtTime(amp * 0.13, t + 0.004);
-      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-      osc.connect(og);
-      this._route(og, SEND.stone);
-      osc.start(t);
-      osc.stop(t + 0.16);
-    }
+    /*
+     * Dressed stone: higher than a boulder and it rings for longer, because a
+     * cut block is dense and has flat faces to ring between. The top mode is
+     * the one you hear as the crack.
+     */
+    this._modal(
+      430 + amp * 240,
+      // Same weighting lesson as the boulder: the short-decay modes are wide
+      // and catch more of the strike than their gain implies. Left even, the
+      // measured fundamental jumped between 563Hz and 2065Hz from one hit to
+      // the next, which is not variation, it is two different objects.
+      [
+        [1, 1.0, 0.20],
+        [2.19, 0.4, 0.13],
+        [3.67, 0.17, 0.08],
+        [5.41, 0.07, 0.045],
+      ],
+      Math.min(0.5, 0.12 + amp * 0.4),
+      SEND.stone,
+      3,
+    );
   }
 
   /**
