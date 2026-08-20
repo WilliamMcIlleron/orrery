@@ -52,13 +52,19 @@ html, body {
   font: 400 13px/1.5 var(--ui);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  touch-action: none;
+  /* manipulation, not none: it still kills the 300ms double-tap delay, but it
+     leaves pinch-zoom alive on the chrome. The canvas and the stick opt back
+     out below, because there a pinch would fight the drag control. */
+  touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-canvas { display: block; }
+/* The world itself takes every gesture: a drag is the control, and a pinch
+   starting here would fight it. Everything outside the canvas stays zoomable. */
+canvas { display: block; touch-action: none; }
+#stick { touch-action: none; }
 
 /* Visually hidden, still read by screen readers. The canvas is opaque to
    assistive tech, so the page needs a real heading and description somewhere. */
@@ -129,6 +135,36 @@ canvas { display: block; }
   top: -2.5px;
   left: 50%;
   margin-left: -2px;
+}
+
+#brand .by {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  opacity: 0.42;
+  text-decoration: none;
+  text-shadow: var(--ink-shadow);
+  pointer-events: auto;
+  padding: 6px 2px;
+  border-bottom: 1px solid transparent;
+  transition: opacity var(--fast), border-color var(--fast);
+}
+#brand .by:hover,
+#brand .by:focus-visible {
+  opacity: 0.85;
+  border-bottom-color: currentColor;
+}
+#brand .by::before {
+  /* A hairline separator that is punctuation, not a character, so it is not
+     read aloud between the two halves of the credit. */
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 1px;
+  background: currentColor;
+  vertical-align: middle;
+  opacity: 0.5;
+  margin-right: 9px;
 }
 
 #brand .word {
@@ -363,8 +399,8 @@ canvas { display: block; }
   color: var(--ink);
   opacity: 0.6;
   padding: 0 13px;
-  height: 34px;
-  min-height: 34px;
+  height: 40px;
+  min-height: 40px;
   cursor: pointer;
   border-radius: 999px;
   transition: opacity var(--fast), color var(--fast);
@@ -595,8 +631,8 @@ canvas { display: block; }
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   border-radius: 999px;
-  padding: 10px 16px;
-  min-height: 38px;
+  padding: 11px 16px;
+  min-height: 40px;
   cursor: pointer;
   opacity: 0.7;
   transition: opacity var(--fast);
@@ -715,6 +751,22 @@ canvas { display: block; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+#ctxlost {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  background: rgba(6, 8, 13, 0.86);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #eef2f8;
+}
+#ctxlost p { max-width: 34ch; margin: 0 auto 8px; line-height: 1.6; }
+#ctxlost p:last-child { opacity: 0.72; font-size: 12.5px; }
+
 #nowebgl {
   position: fixed;
   inset: 0;
@@ -754,10 +806,18 @@ canvas { display: block; }
 @media (max-width: 560px) {
   #brand { left: 14px; }
   #brand .word { font-size: 10px; letter-spacing: 0.28em; }
+  /* At 375px the credit would push the mark off the left edge. It stays in
+     the ending links and in the page description, so nothing is lost. */
+  #brand .by { display: none; }
   #controls { gap: 7px; }
   #pal { padding: 3px; }
-  #pal button { padding: 0 9px; font-size: 9.5px; letter-spacing: 0.08em; height: 32px; min-height: 32px; }
-  .icon-btn { width: 38px; height: 38px; }
+  /* Narrower, not shorter. Four palettes fit across 375px by losing padding;
+     losing height would take the target under 40px, which is the one dimension
+     that is not ours to trade. */
+  #pal button { padding: 0 9px; font-size: 9.5px; letter-spacing: 0.08em; height: 40px; min-height: 40px; }
+  /* 40px is the floor everywhere, including here. Shrinking the mute button
+     to claw back two pixels of a row that already fits is a bad trade. */
+  .icon-btn { width: 40px; height: 40px; }
   #jump { width: 58px; height: 58px; right: 14px; }
   #hint { font-size: 9px; letter-spacing: 0.1em; padding: 6px 12px; }
 }

@@ -98,7 +98,12 @@ export class Marble {
     /** Seconds since last touching the ground. Drives coyote time. */
     this.airborneFor = 0;
 
-    /** True on the frame the marble returns to ground after real airtime. */
+    /**
+     * Whether the impact currently held in `impact` was a landing.
+     *
+     * Written only where `impact` is written, so it always describes the same
+     * event. Reading it when `impact` is zero is meaningless.
+     */
     this.landed = false;
 
     /** Set by the input layer; consumed on the next grounded step. */
@@ -212,7 +217,17 @@ export class Marble {
     if (vn < 0) {
       // Only landings count, not the constant micro-contact of resting on the
       // ground. Below this the marble is simply in contact, not hitting.
-      if (-vn > 2.5 && -vn > this.impact) this.impact = -vn;
+      if (-vn > 2.5 && -vn > this.impact) {
+        this.impact = -vn;
+        // Was this a landing or just a knock? Set it here, next to the impact
+        // it describes, so the two can never disagree. `airborneFor` has not
+        // been zeroed yet at this point — that happens below.
+        //
+        // The threshold rejects the micro-hops of rolling fast over relief,
+        // which are airborne in the strict sense and sound absurd with a
+        // landing thump under them.
+        this.landed = this.airborneFor > 0.12;
+      }
       vel.addScaledVector(_gn, -vn * (1 + BOUNCE));
     }
     this.grounded = true;
@@ -234,7 +249,13 @@ export class Marble {
       if (vn < 0) {
         // Rocks get a lower threshold than the ground: hitting one is an
         // event, whereas resting on the ground is the default state.
-        if (-vn > 0.8 && -vn > this.impact) this.impact = -vn;
+        if (-vn > 0.8 && -vn > this.impact) {
+          this.impact = -vn;
+          // A rock is never a landing, and capsules resolve after the ground
+          // in the same step. Without this, hitting a boulder on the way down
+          // would inherit the landing flag the ground just set.
+          this.landed = false;
+        }
         vel.addScaledVector(_n, -vn * (1 + BOUNCE));
       }
     }

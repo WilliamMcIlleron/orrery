@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- No maximum-scale and no user-scalable=no. Locking zoom is the reflex for
+     a full-screen canvas and it is a WCAG 1.4.4 failure: someone who needs the
+     overlay text at 200% loses it to stop a gesture that touch-action already
+     handles on the surfaces that care. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Orrery — a small world you roll around</title>
 <meta name="description" content="A hand-built planet you can roll a marble around, in the browser. No physics engine, no models, no build step.">
 <meta name="color-scheme" content="dark light">
@@ -36,13 +40,29 @@
   </div>
 </div>
 
+<!-- Context loss is a different failure from no WebGL at all, and telling
+     someone to enable a thing they already have is worse than saying nothing. -->
+<div id="ctxlost" role="alert">
+  <div>
+    <p><strong>The graphics context was lost</strong></p>
+    <p>Usually the tab was in the background too long, or another program wanted the GPU. It should come back on its own; reload if it does not.</p>
+  </div>
+</div>
+
 <!-- Debug readout. Hidden unless ?dev — a framerate counter in the corner is
      most of what makes a finished piece read as somebody's test build. -->
 <pre id="hud" hidden>booting…</pre>
 
-<header id="brand" aria-hidden="true">
-  <span class="mark"></span>
+<!-- The whole point of a portfolio piece is that someone can find out who
+     made it. This used to be aria-hidden decoration reading "orrery" and
+     nothing else, so the answer was in the README and nowhere a visitor
+     would look. -->
+<header id="brand">
+  <span class="mark" aria-hidden="true"></span>
   <span class="word">orrery</span>
+  <a class="by" href="https://williammcilleron.netlify.app" target="_blank" rel="noopener noreferrer">
+    by William McIlleron
+  </a>
 </header>
 
 <div id="progress" role="group" aria-label="Monuments lit"></div>

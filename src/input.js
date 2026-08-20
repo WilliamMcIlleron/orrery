@@ -10,6 +10,16 @@
 
 const STICK_RADIUS = 54;
 
+/**
+ * Is this keypress aimed at a control rather than at the world?
+ *
+ * Buttons and links have keyboard behaviour of their own, and the game's key
+ * handlers run at window level where they would otherwise win.
+ */
+export function isControlTarget(t) {
+  return !!(t && t.closest && t.closest('button, a[href], input, select, textarea, [contenteditable], [role="button"]'));
+}
+
 export class Input {
   constructor(target, stickEl) {
     this.keys = new Set();
@@ -24,6 +34,12 @@ export class Input {
     addEventListener(
       "keydown",
       (e) => {
+        // Not while a control has focus. Space activates a focused button, and
+        // swallowing it globally means a keyboard user can tab to the palette
+        // and then find that pressing it jumps the marble instead — the piece
+        // claims to be keyboard playable, so the claim has to hold for the
+        // chrome as well as for the world.
+        if (isControlTarget(e.target)) return;
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
           e.preventDefault();
         }

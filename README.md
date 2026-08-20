@@ -11,8 +11,8 @@ You start in the dark. Four monuments stand on the surface, unlit. Roll into
 one and it lights and sounds a note. Light all four and dawn breaks over the
 whole planet. A lit monument's marker becomes a link to the thing it names.
 
-**Work in progress.** World, physics, camera, progression, sound, wayfinding
-and links are done. Texture work is not — see
+**Work in progress.** World, physics, camera, progression, surface shading,
+sound, wayfinding and links are done. See
 [Where it is going](#where-it-is-going).
 
 ## Running it
@@ -69,15 +69,28 @@ On flat ground a chase camera is a fixed offset and a `lookAt`. On a sphere,
 Miss any one of the three and it looks wrong in a way that is genuinely hard to
 name if you do not already know what you are looking for.
 
-### The terrain is a lie, and it is worth it
+### The terrain is analytic, and that pays for itself twice
 
 The planet mesh is displaced by a sum of sines — cheap, smooth, and seamless on
-a sphere by construction, with no wrapping seam to hide. The collider
-underneath it is still a perfect sphere, sitting at the midpoint of the relief.
+a sphere by construction, with no wrapping seam to hide. What it buys visually
+is the ability to perceive your own speed: on a perfectly smooth sphere nothing
+passes you, and rolling feels identical at every velocity.
 
-At this amplitude, against a marble of this size, the mismatch is invisible.
-What it buys is the ability to perceive your own speed: on a perfectly smooth
-sphere nothing passes you, and rolling feels identical at every velocity.
+The collider used to be a perfect sphere sitting at the midpoint of that
+relief, on the theory that the mismatch was too small to see. It was not. The
+marble hovered up to most of a radius above every hollow — visibly floating
+over ground it was supposed to be resting on — and the hills it rolled through
+were not there at all.
+
+Because the terrain is a function rather than a mesh lookup, the exact ground
+height under any point is one evaluation away, and the true surface normal is
+three. So collision samples the real ground every step, pushes out along the
+real normal, and applies friction along the slope instead of across it. A
+marble on a hillside now rolls off it.
+
+The same function is read again in the shader, which is where the layering
+below comes from. Writing the terrain as maths rather than as vertex data is
+the single decision the ground, the collision and the shading all depend on.
 
 ### The ground is layered, and the layering is free
 
@@ -108,16 +121,27 @@ Every sound is synthesised at runtime from noise and oscillators. Nothing to
 download, nothing to license, and no two megabytes of MP3 attached to a page
 someone looks at for forty seconds.
 
-- **Rolling** is a loop of lightly integrated noise — closer to brown than
-  white, so it rumbles rather than hisses — through a lowpass filter. Speed
-  opens the filter *and* raises the gain, so going faster reads as brighter
-  rather than merely louder, which is what a real rolling object does. It cuts
-  out entirely mid-air; hearing a marble roll while it is in flight is uncanny.
+- **Rolling** is granular: about nine hundred 1.6ms grains scattered through
+  a five-second buffer, looped. Speed drives `playbackRate`, which moves the
+  rate the grains arrive at *and* their pitch together — which is what a real
+  rolling object does, and what a filter sweep can only imitate. The first
+  build was filtered brown noise, and it was a mistake: on a phone the low end
+  simply is not reproduced, so all that survived was hiss. A quiet bed sits
+  under the grains to carry the weight on speakers that can. It cuts out
+  entirely mid-air; hearing a marble roll while it is in flight is uncanny.
 - **Knocks** are a short noise burst with the decay envelope baked into the
   buffer, through a bandpass whose centre frequency rises with impact strength.
   Rate limited, because a marble resting against a rock generates a contact
   every frame and without the limit it machine-guns.
+- **Landings** are a knock with a sine body under it, dropping 120Hz to 58Hz
+  over a sixth of a second. Only real airtime gets one — the flag that decides
+  is written next to the impact it describes, and a boulder struck on the way
+  down clears it, because a rock is not a floor.
 - **Chimes** are two sine partials climbing a pentatonic run, one per monument.
+- **Everything has a reverb send**, from a generated impulse response, at a
+  different depth per sound. A chime is 55% wet and the rolling loop is 5%:
+  the world should sound large around the things that ring and close around
+  the thing you are pushing.
 - **The dawn swell** is four slightly detuned oscillators over nine seconds.
 
 Nothing is built until the first real input event, because a browser will not
@@ -186,11 +210,15 @@ Three passes on top of the scene, and the reason for each:
   its own travelling lamp becomes the brightest thing on screen and bloom
   turns it into a fireball. It is above 1.0 so only genuinely emissive things
   bloom.
-- **A fresnel atmosphere**: a sphere 5.5% larger than the world, rendered
-  inside-out and additively, invisible where you look straight through it and
-  brightest where your sight line grazes the surface. That is the geometry
-  that makes a real atmosphere a bright rim from orbit. Without it the planet
-  is a hard-edged shape cut out of the background.
+- **An atmosphere**, and not the usual one. The obvious build is a slightly
+  larger sphere shaded by fresnel, and it looks right until the camera is
+  *inside* the shell — which here it always is, because the shell has to be
+  big enough to sit above the horizon. From in there, fresnel brightens toward
+  the screen edges rather than toward the planet, so the halo tracks your head
+  instead of the world. What it actually does is march the view ray to its
+  closest approach to the planet's centre and shade on that distance, which is
+  a property of the world and not of where you happen to be looking. Without
+  it the planet is a hard-edged shape cut out of the background.
 - **Vignette and a whisper of grain**, after tone mapping so "darken the
   corners by 12%" means what it says. The grain earns its place: large smooth
   gradients — a sky, an unlit hemisphere — band into visible steps at 8 bits
@@ -247,11 +275,31 @@ planets, and a bug you saw once might never come back.
 
 ## Accessibility
 
-- Fully keyboard playable.
-- `focus-visible` outlines on every control, 40px minimum touch targets.
+- Fully keyboard playable — and the world's keys yield to the chrome. Arrows
+  and space are grabbed at window level, which is fine until someone tabs to
+  the palette and finds that pressing space jumps the marble instead of
+  choosing a colour. Both handlers bail out when the event came from a button
+  or a link.
+- `focus-visible` outlines on every control, 40px minimum on every control at
+  every breakpoint. The narrow layout buys its space by shedding horizontal
+  padding rather than height, which is the one dimension that is not ours to
+  trade.
+- **Zoom is not blocked.** `user-scalable=no` is the reflex for a full-screen
+  canvas and it is a WCAG 1.4.4 failure: it takes 200% text away from someone
+  who needs it in order to prevent a gesture that `touch-action` already
+  handles. `touch-action: none` now sits on the canvas and the stick, where a
+  pinch would genuinely fight the drag control, and nowhere else.
 - The canvas is opaque to assistive tech, so the page carries a real `h1` and a
   described-in-words summary of what is on the planet.
 - A browser without WebGL gets a written explanation instead of a black rectangle.
+- **A lost graphics context is recoverable.** A backgrounded tab on a phone can
+  have its WebGL context taken away, and the default outcome is a black
+  rectangle that never comes back while the loop keeps stepping physics into
+  it. Losing it now pauses the loop and says what happened; `preventDefault` on
+  the loss event is the part that makes a restore possible at all, and without
+  it `webglcontextrestored` never fires. The frame clock is reset on the way
+  back, or the first frame carries the whole outage as one delta and throws the
+  marble off the planet.
 - Nothing autoplays, moves on its own, or flashes.
 
 ## Development
@@ -281,9 +329,7 @@ visual identity. Noted here so it does not get proposed again.
 
 ## Where it is going
 
-- **Surface texture.** Materials are still flat colour; the shapes and light do
-  all the work.
-- **Dust off the marble at speed**, and a trail on the ground.
+- **Dust off the marble at speed.** The trail is not coming back — see above.
 - **More than four monuments**, once there is more worth putting on the planet.
 
 ## Credits

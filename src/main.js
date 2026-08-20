@@ -3,7 +3,7 @@ import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE, HIT_STOP } from "./con
 import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
-import { Input } from "./input.js";
+import { Input, isControlTarget } from "./input.js";
 import { Marble } from "./marble.js";
 import { ChaseCamera } from "./chase-camera.js";
 import { Progression } from "./progression.js";
@@ -257,6 +257,9 @@ function doJump() {
 
 addEventListener("keydown", (e) => {
   if (e.code !== "Space") return;
+  // See isControlTarget: Space belongs to a focused button before it belongs
+  // to the marble.
+  if (isControlTarget(e.target)) return;
   // Space scrolls the page by default, and on a fixed-height body that is a
   // silent no-op that eats the keypress.
   e.preventDefault();
@@ -436,8 +439,41 @@ let workAcc = 0;
 let lastDawn = -1;
 let hitStop = 0;
 
+/*
+ * Context loss.
+ *
+ * A phone that backgrounds the tab, sleeps, or simply runs low on GPU memory
+ * can take the WebGL context away, and the default outcome is a black
+ * rectangle that never comes back — with the loop still running, still
+ * stepping physics, still burning battery on a canvas nobody can see.
+ *
+ * `preventDefault` on the loss event is what tells the browser we would like
+ * it back; without that call `webglcontextrestored` never fires at all. Three
+ * rebuilds its own GPU-side state on restore, so there is nothing to do on the
+ * way back in except start drawing again.
+ */
+let contextLost = false;
+renderer.domElement.addEventListener("webglcontextlost", (e) => {
+  e.preventDefault();
+  contextLost = true;
+  // setPageVisible, not setMuted: the user did not choose this, and setMuted
+  // would persist it into their next visit.
+  audio.setPageVisible?.(false);
+  document.getElementById("ctxlost")?.style.setProperty("display", "grid");
+}, false);
+renderer.domElement.addEventListener("webglcontextrestored", () => {
+  contextLost = false;
+  audio.setPageVisible?.(!document.hidden);
+  // The clock has to be reset or the first frame back carries the whole
+  // outage as one delta, and the marble is thrown off the planet.
+  last = performance.now();
+  document.getElementById("ctxlost")?.style.removeProperty("display");
+}, false);
+
 function frame(now) {
   requestAnimationFrame(frame);
+  // Keep the loop alive so the restore event can be handled, but do no work.
+  if (contextLost) { last = now; return; }
 
   let wall = (now - last) / 1000;
   last = now;
@@ -506,10 +542,12 @@ function frame(now) {
   audio.updateRoll(marble.speed, MAX_SPEED, marble.grounded, slope);
   const hit = marble.takeImpact();
   if (hit) {
-    // A landing has a body under the knock; a rock does not.
+    // A landing has a body under the knock; a rock does not. The flag is
+    // written by whichever contact won the peak, so it needs no clearing here
+    // — clearing it inside this branch used to let it latch across the
+    // impact-free contacts of ordinary rolling.
     if (marble.landed) audio.land(hit);
     else audio.knock(hit);
-    marble.landed = false;
     marble.squashOnLanding(hit);
     // Only genuinely hard landings freeze. Every knock doing it would make
     // ordinary rolling feel like the framerate is broken.
