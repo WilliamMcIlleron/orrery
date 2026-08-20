@@ -137,3 +137,28 @@ export const DAWN_SECONDS = 7;
  * help rather than instruction. Resets every time one lights.
  */
 export const WAYFINDER_DELAY = 11;
+
+/**
+ * Icosphere subdivision for the planet.
+ *
+ * PolyhedronGeometry cuts each of the twenty base faces into (detail+1)^2
+ * triangles, so this is quadratic and not exponential: 4 gives 500 triangles,
+ * 10 gives 2420. Vertex count is what the AO bake pays for and neither number
+ * is close to mattering.
+ *
+ * What it actually controls is the size of a facet against the size of the
+ * marble, which is the whole low-poly look. Too coarse and relief reads as
+ * flat panels rather than as landforms.
+ */
+export const PLANET_DETAIL = 8;
+/*
+ * 8, chosen by looking at 4, 8, 12 and 16 side by side under raking light,
+ * which is the only condition where facet size actually shows.
+ *
+ * At 4 the ground is 500 triangles and a single facet covers a third of the
+ * screen — relief reads as flat panels rather than as landforms, and it is
+ * most of what made the piece look like a test build. At 12 and above the
+ * ground goes smooth while the rocks stay chunky, so the two stop belonging to
+ * the same world. 8 is the point where the horizon is a curve, the terrain
+ * undulates, and a facet is still about the size of a facet on a boulder.
+ */

@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { R, RELIEF, WORLD_SEED, TOUCH_RANGE } from "./config.js";
+import { R, RELIEF, WORLD_SEED, TOUCH_RANGE, PLANET_DETAIL } from "./config.js";
 import { addSurfaceNoise, makeSweep } from "./surface.js";
+import { makeBloomable } from "./postfx.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface, closestOnSegment } from "./geometry.js";
 
@@ -26,23 +27,84 @@ export function buildWorld(scene, P, content) {
   const D = P.dawn ?? {};
 
   /* ---- lighting ---- */
+  /*
+   * The sun, and a shadow camera that follows the marble.
+   *
+   * The first version pointed a single orthographic shadow camera at the
+   * origin with a frustum 90 units wide — wide enough to hold the entire
+   * planet. That sounds like the safe choice and it is the expensive one:
+   * 2048 texels across 90 units is a texel every 0.044 units, which on a
+   * sphere whose faces meet the light at every angle is coarse enough that
+   * grazing faces self-shadow across their whole width. The result was a
+   * soft-edged wedge lying across the terrain that read as a rendering fault,
+   * and no contact shadow worth the map it was drawn on.
+   *
+   * You can only ever see a small cap of a planet this size, so the shadow
+   * camera only ever needs to cover that cap. A frustum 32 units across puts a
+   * texel at 0.016 units — nearly three times finer — and confines every
+   * artefact to ground you are standing on rather than spreading it over the
+   * horizon.
+   */
+  const SUN_DIR = new THREE.Vector3(60, 80, 40).normalize();
+  const SUN_DIST = 90;
+  const SHADOW_HALF = 16;
+
   const sun = new THREE.DirectionalLight(P.sun, P.sunInt);
-  sun.position.set(60, 80, 40);
+  sun.position.copy(SUN_DIR).multiplyScalar(SUN_DIST);
   sun.castShadow = true;
-  // 2048 across a frustum 90 units wide puts a shadow texel at about 0.044
-  // units. At 1024 the marble's own shadow was a soft blob rather than a
-  // contact shadow, and a contact shadow is most of what sells the marble
-  // as touching the ground.
   sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera;
-  sc.near = 20;
-  sc.far = 220;
-  sc.left = -R * 1.5;
-  sc.right = R * 1.5;
-  sc.top = R * 1.5;
-  sc.bottom = -R * 1.5;
-  sun.shadow.bias = -0.0012;
+  sc.near = SUN_DIST - R - RELIEF - 6;
+  sc.far = SUN_DIST + R + RELIEF + 6;
+  sc.left = -SHADOW_HALF;
+  sc.right = SHADOW_HALF;
+  sc.top = SHADOW_HALF;
+  sc.bottom = -SHADOW_HALF;
+  // normalBias is the right tool here and plain bias is not. Constant bias
+  // trades acne for peter-panning uniformly; normalBias pushes the sample
+  // along the surface normal, so it scales with exactly the grazing geometry
+  // that causes the acne and leaves face-on ground alone.
+  sun.shadow.bias = -0.0002;
+  // 0.12 was found by sweep, not by taste: below about 0.1 the grazing faces
+  // of the sphere self-shadow in a broad wedge, and above about 0.3 the
+  // marble's contact shadow starts to detach from the marble.
+  sun.shadow.normalBias = 0.12;
   scene.add(sun);
+  // A directional light aims at its target, and the target has to be in the
+  // scene graph for its world matrix to be updated.
+  scene.add(sun.target);
+
+  const _sunCentre = new THREE.Vector3();
+  const _sunSide = new THREE.Vector3();
+  const _sunUp = new THREE.Vector3();
+  /**
+   * Re-centre the shadow camera on a point, snapped to whole shadow texels.
+   *
+   * Without the snap the frustum slides continuously and every shadow edge
+   * crawls against the ground as you roll — the classic shimmer, and more
+   * distracting than the artefact this replaced. Quantising the centre to the
+   * texel grid means the depth map samples the same world points from frame to
+   * frame until it jumps by exactly one texel, which is invisible.
+   *
+   * @param {THREE.Vector3} focus  world point to centre on, normally the marble
+   */
+  function aimShadow(focus) {
+    // A stable basis for the light's own axes. Any two vectors perpendicular
+    // to the light will do, as long as they do not change frame to frame.
+    _sunSide.set(0, 1, 0).cross(SUN_DIR).normalize();
+    _sunUp.crossVectors(SUN_DIR, _sunSide).normalize();
+    const texel = (SHADOW_HALF * 2) / sun.shadow.mapSize.x;
+    const u = Math.round(focus.dot(_sunSide) / texel) * texel;
+    const v = Math.round(focus.dot(_sunUp) / texel) * texel;
+    const w = focus.dot(SUN_DIR);
+    _sunCentre.copy(_sunSide).multiplyScalar(u)
+      .addScaledVector(_sunUp, v)
+      .addScaledVector(SUN_DIR, w);
+    sun.target.position.copy(_sunCentre);
+    sun.position.copy(_sunCentre).addScaledVector(SUN_DIR, SUN_DIST);
+    sun.target.updateMatrixWorld();
+    sun.shadow.camera.updateProjectionMatrix();
+  }
 
   // The fill is doing real work, not mood. Without it the unlit hemisphere is
   // genuinely unusable, and "half the world is black" is a design failure
@@ -85,7 +147,11 @@ export function buildWorld(scene, P, content) {
       transparent: true,
       opacity: P.stars,
     });
-    scene.add(new THREE.Points(g, starMat));
+    const stars = new THREE.Points(g, starMat);
+    // Stars are light sources by definition, and they are the one thing in
+    // the scene small enough that bloom is what stops them reading as dust.
+    makeBloomable(stars);
+    scene.add(stars);
   } else {
     // Burn the same draws so the rock scatter is identical across palettes.
     // Without this, switching palette silently rearranges the world.
@@ -93,7 +159,13 @@ export function buildWorld(scene, P, content) {
   }
 
   /* ---- planet ---- */
-  const planetGeo = new THREE.IcosahedronGeometry(R, 4);
+  // Overridable from the URL so subdivision can be compared side by side
+  // rather than argued about. ?detail=8 and reload.
+  const DETAIL = (() => {
+    const q = Number(new URLSearchParams(location.search).get("detail"));
+    return Number.isFinite(q) && q >= 1 && q <= 24 ? q : PLANET_DETAIL;
+  })();
+  const planetGeo = new THREE.IcosahedronGeometry(R, DETAIL);
   {
     const p = planetGeo.attributes.position;
     const shade = new Float32Array(p.count * 3);
@@ -213,6 +285,7 @@ export function buildWorld(scene, P, content) {
     const collar = new THREE.Mesh(new THREE.TorusGeometry(rad * 0.92, 0.13, 10, 30), collarMat);
     collar.position.copy(base).addScaledVector(up, h * 0.755);
     collar.quaternion.setFromUnitVectors(UP_Z, up);
+    makeBloomable(collar);
     scene.add(collar);
 
     /*
@@ -246,6 +319,7 @@ export function buildWorld(scene, P, content) {
     ring.position.addScaledVector(up, -(TOUCH_RANGE * TOUCH_RANGE) / (4 * R) + 0.06);
     ring.quaternion.setFromUnitVectors(UP_Z, up);
     ring.renderOrder = 1;
+    makeBloomable(ring);
     scene.add(ring);
 
     /*
@@ -301,6 +375,7 @@ export function buildWorld(scene, P, content) {
     beam.position.copy(base).addScaledVector(up, h * 0.72 + beamH / 2);
     beam.quaternion.setFromUnitVectors(UP_Y, up);
     beam.renderOrder = 3;
+    makeBloomable(beam);
     scene.add(beam);
 
     // A glow only pays for itself where there is dark to glow into.
@@ -438,7 +513,7 @@ export function buildWorld(scene, P, content) {
     capsules,
     monuments,
     lamp,
-    handles: { sun, hemi, lamp, starMat, planetMat, rockMat, monumentMat, sweep },
+    handles: { sun, aimShadow, hemi, lamp, starMat, planetMat, rockMat, monumentMat, sweep },
   };
 }
 

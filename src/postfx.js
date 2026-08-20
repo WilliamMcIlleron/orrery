@@ -94,22 +94,93 @@ const GradeShader = {
 };
 
 /**
+ * The layer that decides what is allowed to bloom.
+ *
+ * Anything on it is treated as a light source. Everything else is rendered
+ * black into the bloom pass, which keeps it out of the blur while still
+ * letting it occlude the things that do glow.
+ */
+export const BLOOM_LAYER = 1;
+
+/** Adds `object` and all of its descendants to the bloom layer. */
+export function makeBloomable(object) {
+  object.traverse((n) => n.layers.enable(BLOOM_LAYER));
+}
+
+/**
+ * Composites the blurred bloom back over the untouched render.
+ *
+ * Additive, because bloom is light spilling — it should only ever brighten.
+ */
+const CombineShader = {
+  uniforms: { tDiffuse: { value: null }, tBloom: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tBloom;
+    varying vec2 vUv;
+    void main() {
+      gl_FragColor = texture2D(tDiffuse, vUv) + texture2D(tBloom, vUv);
+    }
+  `,
+};
+
+const BLACK = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+/**
  * The render pipeline.
  *
  * Bloom is what makes an emissive material read as a light source rather than
  * as a bright patch of paint. It is also the most expensive thing here, so it
  * is skipped entirely when a palette asks for none — Riso is a flat print and
  * a glowing one would just look like the other three.
+ *
+ * ## Why the bloom is selective
+ *
+ * The obvious build runs one bloom over the finished frame and keeps the
+ * ground out of it with a high threshold. That does not work here, and the
+ * reason is the low-poly ground: it is flat shaded, so a whole triangle has
+ * one luminance. Near the horizon the terrain sits right around any threshold
+ * you pick, so some facets cross it and their neighbours do not — and blurring
+ * that gives a soft-edged wedge with dead straight sides lying across the
+ * terrain. It reads as a rendering fault, because it is one.
+ *
+ * Raising the threshold until the ground is safe does remove it, and takes the
+ * glow off the lit monuments with it, which is the whole payoff of the piece.
+ *
+ * So instead: render the scene a second time with everything that is not a
+ * light source painted black, bloom *that*, and add it back. Nothing that is
+ * not emissive can enter the blur at any threshold, which means the threshold
+ * is free to be low and the glow can be as generous as it wants. The black
+ * pass is a real second draw of the scene, but the scene is two thousand
+ * triangles and it runs at half resolution.
+ *
+ * Fog has to come off for that pass. Fog blends toward the background colour,
+ * so distant black ground would fade up to a bright sky colour and bloom after
+ * all — the exact artefact, moved to the horizon. The background itself stays,
+ * because sky light spilling down over the hills is wanted.
  */
 export class Post {
   constructor(renderer, scene, camera, P) {
     this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
     this.enabled = true;
+    this._stash = new Map();
+
+    this.bloom = null;
+    this.bloomComposer = null;
+    this.combine = null;
 
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
 
-    this.bloom = null;
     if ((P.bloomStrength ?? 0) > 0.001) {
       this.bloom = new UnrealBloomPass(
         // Half resolution. Bloom is a blur; nobody has ever noticed it being
@@ -119,7 +190,15 @@ export class Post {
         P.bloomRadius ?? 0.5,
         P.bloomThreshold ?? 0.7,
       );
-      this.composer.addPass(this.bloom);
+
+      this.bloomComposer = new EffectComposer(renderer);
+      this.bloomComposer.renderToScreen = false;
+      this.bloomComposer.addPass(new RenderPass(scene, camera));
+      this.bloomComposer.addPass(this.bloom);
+
+      this.combine = new ShaderPass(CombineShader);
+      this.combine.uniforms.tBloom.value = this.bloomComposer.renderTarget2.texture;
+      this.composer.addPass(this.combine);
     }
 
     this.composer.addPass(new OutputPass());
@@ -137,9 +216,40 @@ export class Post {
   }
 
   setSize(w, h) {
-    this.composer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const dpr = Math.min(devicePixelRatio, 2);
+    this.composer.setPixelRatio(dpr);
     this.composer.setSize(w, h);
-    if (this.bloom) this.bloom.setSize(w / 2, h / 2);
+    if (this.bloomComposer) {
+      // Half resolution for the whole bloom branch, not just the blur inside
+      // it. The output of this composer is a blur that gets added to a
+      // full-resolution frame, so there is nothing in it that a second
+      // full-size scene draw could resolve — and at half size the extra draw
+      // costs a quarter of the fill rate.
+      this.bloomComposer.setPixelRatio(dpr);
+      this.bloomComposer.setSize(w / 2, h / 2);
+      this.bloom.setSize(w / 2, h / 2);
+      this.combine.uniforms.tBloom.value = this.bloomComposer.renderTarget2.texture;
+    }
+  }
+
+  /** Paint everything that is not a light source black, and remember it. */
+  _darken() {
+    const scene = this.scene;
+    this._fog = scene.fog;
+    scene.fog = null;
+    scene.traverse((n) => {
+      if (!n.material) return;
+      if (n.layers.isEnabled(BLOOM_LAYER)) return;
+      this._stash.set(n, n.material);
+      n.material = BLACK;
+    });
+  }
+
+  /** Put back exactly what _darken took. */
+  _restore() {
+    for (const [n, m] of this._stash) n.material = m;
+    this._stash.clear();
+    this.scene.fog = this._fog;
   }
 
   /** Pull grading values off a palette. Defaults are a no-op identity grade. */
@@ -158,6 +268,11 @@ export class Post {
 
   render(elapsed) {
     this.grade.uniforms.uTime.value = elapsed;
+    if (this.bloomComposer) {
+      this._darken();
+      this.bloomComposer.render();
+      this._restore();
+    }
     this.composer.render();
   }
 }

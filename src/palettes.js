@@ -123,7 +123,11 @@ export const PALETTES = {
   riso: {
     name: "Riso",
     note: "flat print · no night side",
-    marbleVein: 0xe0503a, marbleVeins: 0.75,
+    // A near-black ink ball with a bright red vein at full strength reads as
+    // lava, not as print — the vein was lighter than the base, so it became
+    // the figure and the ball became the ground. A riso overprint sits close
+    // to the ink it lands on.
+    marbleVein: 0x6e2a20, marbleVeins: 0.42,
     strata: 0.95,
     // A print has no vignette and no blacks. Lift hard, pull gain down, and
     // let the ink sit in a narrow band — that compression *is* the look.

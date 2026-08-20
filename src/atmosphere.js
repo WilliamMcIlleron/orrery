@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { R } from "./config.js";
+import { makeBloomable } from "./postfx.js";
 
 /**
  * The glow around the planet.
@@ -104,6 +105,9 @@ export function createAtmosphere(scene, P) {
   // sit beyond everything else in the scene and inside the far plane.
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(R * 3.2, 32, 24), material);
   mesh.renderOrder = 1;
+  // The halo is light, so it belongs in the bloom pass — and it is most of
+  // what makes the limb read as glowing rather than as a painted edge.
+  makeBloomable(mesh);
   scene.add(mesh);
 
   return {

@@ -203,13 +203,34 @@ placed costs a few hundred cheap distance checks and fixes both.
 
 Three passes on top of the scene, and the reason for each:
 
-- **Bloom** is what makes an emissive material read as a *light source* rather
-  than as a bright patch of paint. Half resolution — bloom is a blur, nobody
-  has ever noticed it being blurrier, and it costs a quarter of the fill rate.
-  The threshold matters more than the strength: set too low, the marble under
-  its own travelling lamp becomes the brightest thing on screen and bloom
-  turns it into a fireball. It is above 1.0 so only genuinely emissive things
-  bloom.
+- **Bloom**, and it is *selective*, which took two attempts. Bloom is what
+  makes an emissive material read as a light source rather than as a bright
+  patch of paint, and the obvious build runs one over the finished frame with
+  a threshold high enough to keep the ground out.
+
+  That does not work here, and the reason is the ground itself. It is flat
+  shaded, so an entire triangle carries one luminance. Near the horizon the
+  terrain sits right around whatever threshold you pick, so some facets cross
+  it and their neighbours do not — and blurring that gives a soft-edged wedge
+  with dead straight sides lying across the hills. It reads as a rendering
+  fault, because it is one. Raising the threshold until the ground is safe
+  does remove it, and takes the glow off the lit monuments with it, which is
+  the entire payoff of the piece.
+
+  So the scene is drawn a second time with everything that is not a light
+  source painted black, and *that* is what gets blurred and added back. The
+  black pass still occludes, so a collar behind a hill is still hidden by the
+  hill. Nothing that is not emissive can enter the blur at any threshold,
+  which frees the threshold to stay low and the glow to be generous. Fog comes
+  off for that pass — fog blends toward the background colour, so distant
+  black ground would fade up to a bright sky and bloom after all, which is the
+  same artefact moved to the horizon.
+
+  The whole bloom branch runs at half resolution, not just the blur inside it.
+  Its output is a blur added to a full-resolution frame, so there is nothing a
+  second full-size scene draw could resolve. Measured on an Intel Iris Xe at
+  1280×720: 60fps with or without it, and the pass adds 80 draw calls to a
+  frame that has headroom to spare.
 - **An atmosphere**, and not the usual one. The obvious build is a slightly
   larger sphere shaded by fresnel, and it looks right until the camera is
   *inside* the shell — which here it always is, because the shell has to be
@@ -238,6 +259,49 @@ When one lights it fires a beam — an open-ended cone, additive, fading with
 height and toward its own silhouette so it has no visible edge. That beam is
 what you can see from the far side of the planet, and it turns "four pillars
 somewhere" into a map you can read at a glance.
+
+### The shadow camera follows the marble
+
+The first version aimed one orthographic shadow camera at the origin with a
+frustum ninety units wide, which is wide enough to hold the entire planet.
+That sounds like the safe choice and it is the expensive one: 2048 texels
+across ninety units is a texel every 0.044 units, and on a sphere whose faces
+meet the light at every angle that is coarse enough for grazing facets to
+self-shadow across their whole width.
+
+You can only ever see a small cap of a planet this size, so the shadow camera
+only ever needs to cover that cap. Thirty-two units across puts a texel at
+0.016 — nearly three times finer — and it finally produces a contact shadow
+under the marble rather than a smudge.
+
+Two details make a moving shadow camera survivable. The light's position and
+its target move together, so the light *direction* never changes and you still
+roll from day into night. And the centre is snapped to whole shadow texels:
+without that the frustum slides continuously and every shadow edge crawls
+against the ground as you move, which is more distracting than the artefact it
+replaced.
+
+`normalBias` does the anti-acne work rather than plain `bias`. Constant bias
+trades acne for peter-panning everywhere; normal bias pushes the sample along
+the surface normal, so it scales with exactly the grazing geometry that causes
+acne and leaves ground facing the light alone.
+
+### How coarse the ground is, is a decision
+
+The planet is an icosphere, and the subdivision was 4 — five hundred triangles,
+a facet about a third of the screen wide when you stand next to it. Relief read
+as flat panels rather than as landforms, and that was most of what made the
+piece look like a test build.
+
+It is now 8, which is 1620 triangles. Chosen by rendering 4, 8, 12 and 16 from
+the same spot under raking light, which is the only condition where facet size
+actually shows. At 12 and above the ground goes smooth while the boulders stay
+chunky, and the two stop looking like they belong to the same world. 8 is where
+the horizon is a curve, the terrain undulates, and a facet on the ground is
+still about the size of a facet on a boulder.
+
+`?detail=N` on the URL overrides it, so the comparison can be repeated rather
+than argued about.
 
 ### The world is seeded
 
@@ -314,12 +378,17 @@ It does not exist without the flag.
 **A trail burning into the ground behind the marble.** Built, measured, looked
 at three ways, cut.
 
-The planet is 500 triangles, so its vertices sit about 2.7 units apart, and a
-flat-shaded face only lights when all three of its corners do. A brush the
-width of the marble therefore marks one vertex at a time and leaves a dotted
-line; widening it until the mark is continuous takes it to 5.4 units, which is
-six times the marble's diameter — a swathe, not a track. Turned up far enough
-to actually see, it bleached the ground rather than drawing a route.
+The trail was painted into vertex colours, and a flat-shaded face only lights
+when all three of its corners do. At the subdivision of the time — 500
+triangles, vertices about 2.7 units apart — a brush the width of the marble
+marked one vertex at a time and left a dotted line, and widening it until the
+mark was continuous took it to 5.4 units, six times the marble's diameter. A
+swathe, not a track. Turned up far enough to actually see, it bleached the
+ground rather than drawing a route.
+
+The planet is finer now, at 1620 triangles and about 1.5 units between
+vertices, which improves the arithmetic without changing the answer: the brush
+would still have to be three units wide, and the marble is 1.7 across.
 
 It is also behind you, and the chase camera looks forward.
 

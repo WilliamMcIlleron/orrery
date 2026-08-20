@@ -554,6 +554,11 @@ function frame(now) {
     if (hit > 9) hitStop = HIT_STOP;
   }
 
+  // The shadow camera covers a 32-unit cap, so it has to travel with the
+  // thing casting into it. Snapped to texels inside aimShadow, or the edges
+  // crawl as you roll.
+  handles.aimShadow(marble.pos);
+
   chase.update(marble.pos, marble.vel, wall, marble.speed);
   updateMarker();
   post.render(now * 0.001);
