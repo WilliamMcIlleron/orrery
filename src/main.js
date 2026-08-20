@@ -272,7 +272,7 @@ const progression = new Progression(monuments, {
      * sunrise. Centring it opposite would keep it out of sight for half the
      * transition.
      */
-    handles.sweep.uSweepAxis.value.copy(chase.forward).normalize();
+    handles.sweep.uSweepAxis.value.copy(chase.viewForward).normalize();
     handles.sweep.uSweepRim.value.set(P.dawn?.sun ?? P.sun).multiplyScalar(0.42);
     // Reduced motion: a half-width of 2 in cosine space covers the whole
     // sphere at once, so the sweep degrades cleanly into the crossfade it
@@ -579,7 +579,9 @@ function frame(now) {
     accumulator = 0;
   } else {
     while (accumulator >= DT && steps < MAX_STEPS) {
-      marble.step(DT, inp, chase.forward, capsules);
+      // viewForward, not forward: steering has to answer to what is on
+      // screen, or looking left and pushing forward sends you somewhere else.
+      marble.step(DT, inp, chase.viewForward, capsules);
       accumulator -= DT;
       steps++;
     }
@@ -647,6 +649,10 @@ function frame(now) {
   // crawl as you roll.
   handles.aimShadow(marble.pos);
 
+  {
+    const l = input.takeLook(wall);
+    if (l.yaw || l.pitch) chase.look(l.yaw, l.pitch);
+  }
   chase.update(marble.pos, marble.vel, wall, marble.speed);
   // The marker owns the pillar you are standing at; its beacon steps aside so
   // there are never two labels on one monument.

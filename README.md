@@ -39,6 +39,16 @@ Arrow keys or WASD. On a touch screen, drag anywhere — the stick appears under
 your finger rather than in a fixed corner, so you never have to look down at
 your thumb.
 
+**The view moves without the marble.** Right-drag with a mouse, drag with a
+second finger on a touch screen, or Q/E and R/F on a keyboard. Steering follows
+the camera, so looking left and pushing forward sends you left — the controls
+answer to what is on screen rather than to a heading that is not.
+
+Standing still, the view stays exactly where you put it. Once you are moving it
+unwinds back behind the marble, in proportion to speed, because a camera behind
+you is what makes the controls legible and nobody who glanced over their
+shoulder should have to put it back by hand.
+
 The four buttons along the bottom switch palette, or press <kbd>P</kbd> to
 cycle. They are not four coats of paint on the same thing: two of them are
 daylit worlds with no dark side, which means the lamp that travels with the
@@ -461,6 +471,31 @@ Three changes, because one was not enough:
   player has been reading it the whole way through; making it the way out
   costs no new furniture. No href until lit, which also keeps it out of the
   tab order until it means something.
+
+### Free look, and two things it breaks
+
+Letting the camera turn without the marble is four lines of offset and two
+problems.
+
+**Steering has to follow the camera.** Input is camera-relative, and it was
+reading the chase heading — the direction of travel. Turn the view ninety
+degrees, push forward, and the marble sets off along a heading that is no
+longer on screen. There are now two vectors: `forward` is what the chase
+follows, `viewForward` is that turned by the look, and steering reads the
+second one.
+
+**The camera can be pointed into the ground.** On a displaced surface it does
+not have to be below the marble to be inside a hill. The terrain is an analytic
+function, so the honest fix costs one evaluation: find the ground under
+wherever the camera wants to be, and if it is short of clearance push it back
+out along its own radius. Radially rather than along the view, so the camera
+rises out of the slope instead of sliding backwards and shrinking the marble.
+Swept across the full pitch range with the yaw turning: worst clearance 1.199
+against a floor of 1.1.
+
+The offset is built as a vector and rotated, rather than as a height and a
+distance added separately, which is what keeps the marble the same size in
+frame as the view swings up and over it.
 
 ### The world is seeded
 
