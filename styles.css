@@ -1076,3 +1076,40 @@ body::after {
   #loading .spinner { border-top-color: rgba(223, 229, 240, 0.5); }
   * { transition-duration: 1ms !important; }
 }
+
+/*
+ * The crystal tally.
+ *
+ * Sits under the clock and only exists once you have rung one — a counter
+ * reading 0/6 before you know crystals are a thing is a target you did not
+ * agree to, and the piece is not a checklist. After the first, it is a tally
+ * of something you found.
+ */
+#crystals {
+  position: fixed;
+  z-index: 6;
+  top: calc(max(18px, env(safe-area-inset-top)) + 38px);
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: var(--ink-done);
+  text-shadow: var(--ink-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s var(--ease);
+  font-variant-numeric: tabular-nums;
+}
+
+#crystals.on { opacity: 0.62; }
+
+/* The beat where one is struck. Brief, and it settles back on its own. */
+#crystals.hit {
+  opacity: 0.95;
+  transition: opacity 0.12s var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #crystals { transition: none; }
+}

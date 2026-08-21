@@ -324,6 +324,63 @@ function stepClosing(dt) {
   }
 }
 
+const crystalsEl = document.getElementById("crystals");
+let crystalFlash = 0;
+
+/*
+ * Where each crystal cluster is.
+ *
+ * The clusters themselves only carry their material and their pulse, which is
+ * all the renderer needed. Their positions live in the capsules they pushed,
+ * so this reads them back once rather than threading a second list out of the
+ * world builder.
+ */
+const clusterAt = [];
+for (const c of capsules) {
+  if (c.kind === "crystal" && clusterAt[c.cluster] === undefined) {
+    clusterAt[c.cluster] = c.a.clone();
+  }
+}
+
+/**
+ * When you lose flow, the crystals within reach answer.
+ *
+ * Reported: nothing indicates crystals are worth hitting until the end screen
+ * counts them. A tally that appears after the first one teaches the rule too
+ * late to act on. This teaches it at the only moment the answer is useful —
+ * you have just crashed, the marble has gone dark, and the things that would
+ * fill it back up light up across the ground in front of you.
+ *
+ * Nothing is written down and nothing is pointed at: they simply ring.
+ */
+const CALL_RANGE = 46;
+
+function callCrystals(from) {
+  for (let i = 0; i < clusterAt.length; i++) {
+    const p = clusterAt[i];
+    if (!p) continue;
+    const d = from.distanceTo(p);
+    if (d > CALL_RANGE) continue;
+    // Loudest close by, so the nearest one reads as the one to go for.
+    ringCluster(crystalClusters, i, 4.2 * (1 - d / CALL_RANGE));
+  }
+}
+
+/**
+ * The running tally, revealed by the first one you ring.
+ *
+ * Deliberately not shown from the start. A counter reading 0/6 before you have
+ * met a crystal is a target you never agreed to, and this is a place rather
+ * than a checklist — the tally should be a note about what you have found, not
+ * an instruction about what you are missing.
+ */
+function showCrystals() {
+  if (!crystalsEl) return;
+  crystalsEl.textContent = `${rung.size}/${crystalClusters.length} crystals`;
+  crystalsEl.classList.add("on", "hit");
+  crystalFlash = 0.45;
+}
+
 const progression = new Progression(monuments, {
   onApproach: () => audio.threshold(),
   onLight: (index, lit, total) => {
@@ -729,6 +786,7 @@ function frame(now) {
     // The impact that caused it is already making its own noise; this is the
     // sound of the thing you lost, pitched under it.
     audio.flowLost();
+    callCrystals(marble.pos);
   }
 
   progression.update(marble.pos, wall, REDUCED_MOTION);
@@ -752,6 +810,11 @@ function frame(now) {
   }
 
   stepClosing(wall);
+
+  if (crystalFlash > 0) {
+    crystalFlash -= wall;
+    if (crystalFlash <= 0) crystalsEl?.classList.remove("hit");
+  }
 
   if (marble.jumped) {
     marble.jumped = false;
@@ -782,7 +845,23 @@ function frame(now) {
     if (struck?.kind === "crystal") {
       audio.crystal(hit, struck.cluster);
       ringCluster(crystalClusters, struck.cluster, hit);
+      const fresh = !rung.has(struck.cluster);
       rung.add(struck.cluster);
+
+      /*
+       * A crystal fills you back up.
+       *
+       * They were decoration with a tally attached: nothing told you they were
+       * there, and finding one did nothing until the end screen counted them.
+       * Giving them the flow meter makes them worth going out of your way for
+       * and makes them mean something precisely when you have just crashed,
+       * which is when you would most want a reason to look up.
+       *
+       * Every strike restores, not just the first, or a cluster you have
+       * already found becomes scenery again on the trip back.
+       */
+      marble.flow = 1;
+      if (fresh) showCrystals();
     } else if (struck?.kind === "stone") audio.stone(hit);
     else if (marble.landed) audio.land(hit);
     else audio.knock(hit);

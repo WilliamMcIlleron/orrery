@@ -783,6 +783,30 @@ Verified by flattening the landforms and driving for a minute:
 
 Six consecutive jumps: 1.00 to 1.00, no dip. Driving into a wall: 1.00 to 0.00.
 
+### The crystals had nothing to say for themselves
+
+Reported: no indication or motivation to hit the crystals until the end screen
+counts them. Both halves of that were true. They rang prettily, and that was
+the whole of it — the tally arrived after the run, when it was too late to act
+on, and nothing in the world suggested they were worth a detour.
+
+They now hold the flow meter. Ringing one fills it, every time and not just the
+first, or a cluster you have already found goes back to being scenery on the
+return trip. That makes them worth going out of your way for and makes them
+mean something at the exact moment you would most want them to.
+
+The tally appears with the first one you ring and not before. A counter reading
+`0/6` on load is a target nobody agreed to, and this is a place rather than a
+checklist — it should read as a note about what you found, not an instruction
+about what you are missing.
+
+That still teaches the rule one crystal too late, so the last piece is that
+losing flow makes the crystals within 46 units ring, loudest nearest. You have
+just crashed, the marble has gone dark, and the things that would fill it back
+up light up across the ground in front of you. Nothing is written down and
+nothing is pointed at. Measured frame by frame, a cluster 20 units out peaks at
+0.205 pulse and lingers about a second.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time
