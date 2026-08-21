@@ -144,6 +144,10 @@ setTimeout(() => soundHintEl?.classList.add("gone"), 5200);
 document.addEventListener("visibilitychange", () => {
   audio.setPageVisible(document.visibilityState === "visible");
   syncMuteButton();
+  // Coming back, the next frame's delta spans however long the tab was away.
+  // The physics clamp already stops that flinging the marble off the planet;
+  // this stops the run clock being charged for it at all.
+  if (document.visibilityState === "visible") resync = true;
 });
 
 /* ------------------------------------------------------------- progression */
@@ -228,6 +232,18 @@ const againBtn = document.getElementById("again");
 
 /** Wall-clock ms at first input. The run is timed from when you took over. */
 let runStart = 0;
+
+/**
+ * Seconds of run elapsed, accumulated from rendered frames.
+ *
+ * Not `performance.now() - runStart`. That measures wall time, and wall time
+ * keeps passing while the tab is in the background — switch apps mid-run on a
+ * phone and you come back to a clock that has been counting the whole time you
+ * were reading a message. The frame delta is already clamped for the physics,
+ * so accumulating it charges a backgrounded run one frame instead of the whole
+ * outage, and the visibilitychange handler takes even that away.
+ */
+let runElapsed = 0;
 /** Seconds, or null on a first ever visit. */
 const bestBefore = readBest();
 /** True once the run is over, so the clock stops rather than freezing by luck. */
@@ -335,7 +351,7 @@ const progression = new Progression(monuments, {
 
     runDone = true;
     if (clockEl && runStart) {
-      const secs = (performance.now() - runStart) / 1000;
+      const secs = runElapsed;
       const { best, improved } = submit(secs);
       clockEl.classList.remove("idle");
       clockEl.classList.add("on");
@@ -400,7 +416,7 @@ setTimeout(dismissIntro, 9000);
 const jumpBtn = document.getElementById("jump");
 
 function doJump() {
-  if (!runStart) runStart = performance.now();
+  if (!runStart) { runStart = 1; runElapsed = 0; }
   marble.requestJump();
   ensureAudio();
   dismissIntro();
@@ -429,7 +445,8 @@ if (jumpBtn) {
 
 const input = new Input(renderer.domElement, document.getElementById("stick"));
 input.onFirstUse = () => {
-  runStart = performance.now();
+  runStart = 1;
+  runElapsed = 0;
   ensureAudio();
   if (hintEl) hintEl.style.opacity = "0";
   // The card is the first thing anyone sees, and it should leave the instant
@@ -607,6 +624,18 @@ const hudEl = DEV ? document.getElementById("hud") : null;
 if (hudEl) hudEl.hidden = false;
 let accumulator = 0;
 let last = performance.now();
+
+/**
+ * Ask the next frame to treat itself as zero elapsed.
+ *
+ * Set rather than writing `last = performance.now()` directly, because the two
+ * clocks are not interchangeable: requestAnimationFrame hands the callback the
+ * timestamp the frame was scheduled for, which can predate a performance.now()
+ * read taken in an event handler. Stamping `last` from the handler produced a
+ * negative delta on the very next frame — the run clock counted backwards to
+ * -0.2s, measured. Resolving it inside the frame keeps one clock.
+ */
+let resync = false;
 let frames = 0;
 let fpsAcc = 0;
 let workAcc = 0;
@@ -640,7 +669,7 @@ renderer.domElement.addEventListener("webglcontextrestored", () => {
   audio.setPageVisible?.(!document.hidden);
   // The clock has to be reset or the first frame back carries the whole
   // outage as one delta, and the marble is thrown off the planet.
-  last = performance.now();
+  resync = true;
   document.getElementById("ctxlost")?.style.removeProperty("display");
 }, false);
 
@@ -651,10 +680,16 @@ function frame(now) {
 
   let wall = (now - last) / 1000;
   last = now;
+  if (resync) { resync = false; wall = 0; }
+  // Time never runs backwards. Belt and braces against any other path that
+  // rewrites `last` out of band — the context-restore handler still does.
+  if (wall < 0) wall = 0;
   // A backgrounded tab returns a huge delta. Catching up on it would run
   // hundreds of steps in one frame and fling the marble off the planet.
   if (wall > 0.25) wall = 0.25;
   accumulator += wall;
+  // Charged per rendered frame, so a backgrounded tab is not charged at all.
+  if (runStart && !runDone) runElapsed += wall;
 
   const t0 = performance.now();
 
@@ -734,7 +769,7 @@ function frame(now) {
   // stops the moment the run ends rather than being left to freeze by luck.
   if (timed && !runDone && runStart && clockEl) {
     clockEl.classList.remove("idle");
-    clockEl.textContent = formatTime((now - runStart) / 1000);
+    clockEl.textContent = formatTime(runElapsed);
   }
 
   const hit = marble.takeImpact();
