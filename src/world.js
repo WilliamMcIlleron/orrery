@@ -5,7 +5,7 @@ import { makeBloomable } from "./postfx.js";
 import { createSky } from "./sky.js";
 import { makeBoulder, scatterLandmarks } from "./landmarks.js";
 import { mulberry32 } from "./rng.js";
-import { terrain, surface, closestOnSegment } from "./geometry.js";
+import { terrain, surface, groundRadius, closestOnSegment } from "./geometry.js";
 
 /**
  * Builds the planet, its furniture and its lighting into `scene`.
@@ -177,7 +177,10 @@ export function buildWorld(scene, P, content) {
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i).normalize();
       const h = terrain(v.x, v.y, v.z);
-      v.multiplyScalar(R + h * RELIEF);
+      // groundRadius, not R + h * RELIEF: the ramps and ridges live in a
+      // second term and the mesh has to carry them or the marble collides
+      // with landforms that were never drawn.
+      v.multiplyScalar(groundRadius(v));
       p.setXYZ(i, v.x, v.y, v.z);
 
       // Vertex tint by height: high ground catches light, hollows sit in

@@ -621,6 +621,71 @@ available sat just under its ceiling, and after the fix everything pinned at
 maximum — a hop and a drop looked identical. The landing sound had the same
 problem an octave up. Both were rescaled to the range that now exists.
 
+### The ridges, and the arithmetic that killed the ramps
+
+The jump had nothing to jump over. Rolling between monuments was a straight
+line at the speed cap with no decision in it, which is most of why the world
+read as scenery rather than as a place.
+
+Every route between two consecutive monuments now has a ridge lying across it,
+with one pass cut through at 0.3 along its length — never on the line you were
+already driving. Meet the wall and you either jump it, carrying your speed, or
+give up the straight line and go round through the pass. It is not a gate: the
+planet is a sphere and every monument stays reachable the long way.
+
+It began as ramps and ridges, and the ramps did not survive contact with the
+physics. A marble at MAX_SPEED carries `v²/2g` = 169/110 = **1.54 units** of
+climb, and that is the entire vertical budget this world has. The first ramps
+were 4.2 units tall. The marble stalled 3.2 units short of them, on every route,
+every time. Even a ramp it *can* climb is a bad trade, because height is bought
+with speed — 0.7 units of ramp costs a third of your velocity, and the shorter
+air time that follows carries you less far than the flat jump you already had.
+At this gravity a ramp is a brake with extra steps.
+
+So the jump is the only tool and the obstacle is sized to it. The window is
+narrow and was found by sweep rather than by arithmetic, because the marble is
+under power the whole way up and `ACCEL` keeps doing work on the climb:
+
+| crest | rolling into it | jumping it |
+| --- | --- | --- |
+| 1.8 | rolls over | clears |
+| 2.0 | **stopped 3.5 short** | clears from 3–8 units out |
+| 2.8+ | stopped | nothing clears it cleanly |
+
+Above about 2.8 the only "successes" were the collider popping the marble out
+of the wall at 21 units a second, which is a bug being exploited rather than a
+jump being made. 2.0 is the bottom of the window — the lowest wall a rolling
+marble cannot climb.
+
+Two things about the crest are less obvious than they look. It is an *absolute*
+height, not a height added to whatever is underneath: the base relief swings
+three units peak to trough, and added, two of the four routes rolled straight
+over an identical 2.0 while the other two stopped it dead. And it is measured
+against the higher of the approach ground and the ground directly beneath —
+against the approach alone, a ridge line sitting on a rise wants a negative
+fill and stops existing, which is precisely what had happened on the fourth
+route.
+
+Scored by what a player actually feels, which is time:
+
+| route | rolling into it | jumping it |
+| --- | --- | --- |
+| 0 | never crossed in 75s | 1.7s |
+| 1 | never crossed in 75s | 1.6s |
+| 2 | 12.8s, stopped for 9.9 | 1.7s |
+| 3 | 3.4s | 1.7s |
+
+Route 3 is the honest weak one — the ground on its approach happens to launch
+the marble, so it clears without being asked to. Three of four ridges stop a
+rolling marble outright.
+
+`PLANET_DETAIL` went 8 to 12 for this. At 8 a facet is 4.0 units, wider than a
+ridge, and a landform collided with analytically but drawn from the mesh is a
+wall the renderer never showed you. 12 puts a facet at 2.8 so a ridge spans
+three of them. 3380 triangles against 1620 — nothing on a GPU, and the software
+renderer the tests run under is too noisy to resolve it (257, 284 and 264ms
+across repeats of the same two builds).
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time

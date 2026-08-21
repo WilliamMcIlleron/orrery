@@ -173,7 +173,16 @@ export const WAYFINDER_DELAY = 11;
  * marble, which is the whole low-poly look. Too coarse and relief reads as
  * flat panels rather than as landforms.
  */
-export const PLANET_DETAIL = 8;
+export const PLANET_DETAIL = 12;
+
+/*
+ * Was 8, which put a facet at 4.0 units — two and a half marble diameters, and
+ * wider than a ridge. The landforms in terrain-features.js are collided with
+ * analytically and drawn from this mesh, so a facet wider than a feature means
+ * driving into a wall the renderer never showed you. 12 puts a facet at 2.8
+ * units, so a ridge spans three of them and reads as a landform while the
+ * ground still reads as folded paper. 3380 triangles against 1620.
+ */
 /*
  * 8, chosen by looking at 4, 8, 12 and 16 side by side under raking light,
  * which is the only condition where facet size actually shows.
