@@ -173,6 +173,7 @@ export class Post {
     this.camera = camera;
     this.enabled = true;
     this._stash = new Map();
+    this._hidden = [];
 
     this.bloom = null;
     this.bloomComposer = null;
@@ -240,6 +241,26 @@ export class Post {
     scene.traverse((n) => {
       if (!n.material) return;
       if (n.layers.isEnabled(BLOOM_LAYER)) return;
+
+      /*
+       * A transparent sign cannot be painted black — it has to be taken out.
+       *
+       * BLACK is opaque, so swapping it in turns a mostly-transparent quad
+       * into a solid rectangle for the duration of the bloom render. It
+       * contributes no light itself, but it hides everything behind it from
+       * the bloom buffer, and against a starfield that reads as a hard-edged
+       * dark panel hanging in the sky exactly the size of the sign.
+       *
+       * Flagged per object rather than inferred from `transparent`, because
+       * the atmosphere and the monument beams are transparent too and both of
+       * them are supposed to be in this pass.
+       */
+      if (n.userData.bloomSkip) {
+        this._hidden.push(n);
+        n.visible = false;
+        return;
+      }
+
       this._stash.set(n, n.material);
       n.material = BLACK;
     });
@@ -249,6 +270,8 @@ export class Post {
   _restore() {
     for (const [n, m] of this._stash) n.material = m;
     this._stash.clear();
+    for (const n of this._hidden) n.visible = true;
+    this._hidden.length = 0;
     this.scene.fog = this._fog;
   }
 

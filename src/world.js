@@ -4,6 +4,7 @@ import { addSurfaceNoise, makeSweep } from "./surface.js";
 import { makeBloomable } from "./postfx.js";
 import { createSky } from "./sky.js";
 import { makeBoulder, scatterLandmarks } from "./landmarks.js";
+import { makePlaque } from "./plaque.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface, groundRadius, closestOnSegment } from "./geometry.js";
 
@@ -464,7 +465,27 @@ export function buildWorld(scene, P, content) {
     }
 
     capsules.push({ a: base.clone(), b: top.clone(), r: rad });
+    /*
+     * The banner, parked above the obelisk and invisible until it is lit.
+     *
+     * Built here rather than on lighting so that the canvas is rasterised and
+     * uploaded during the load, not during the frame where you touch the ring
+     * — a 1024x512 texture upload mid-run is a visible hitch at exactly the
+     * moment the piece is trying to feel like a reward.
+     */
+    const plaque = makePlaque(
+      { label: item.label, blurb: item.blurb ?? "", accent: new THREE.Color(colour), hasLink: !!item.href },
+            // Just clear of the obelisk's shoulder. It sat at h + 4.6 first, which
+      // is eleven units above the ground: from the twelve or so units away you
+      // actually stand when you light one, that is forty-five degrees up and
+      // straight out of frame. A sign you have to crane at is not a sign.
+      base.clone().addScaledVector(up, h + 1.7 - 0.92),
+      up,
+    );
+    scene.add(plaque);
+
     monuments.push({
+      plaque,
       label: item.label,
       blurb: item.blurb ?? "",
       href: item.href ?? null,

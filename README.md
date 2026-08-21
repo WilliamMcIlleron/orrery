@@ -807,6 +807,49 @@ up light up across the ground in front of you. Nothing is written down and
 nothing is pointed at. Measured frame by frame, a cluster 20 units out peaks at
 0.205 pulse and lingers about a second.
 
+### The monuments now say what they are
+
+The projects are the entire payload of this piece and they were a pillar you
+touched and a link in the corner. You could finish the whole thing without ever
+learning what Lumen *is*. A portfolio that hides its portfolio is a demo.
+
+A lit monument now raises a banner: the project's name, its one line, and its
+own accent colour, at a size that reads from across the valley. Drawn to a
+canvas and uploaded as a texture — the only way to get real type into this
+scene without breaking the rule the whole project is built on, which is that
+there are no asset files anywhere and a font would be the first. A canvas uses
+whatever the reader's machine already has.
+
+Three things it took to make it behave.
+
+**Height.** It sat 11 units up first, which from the twelve or so units away
+you actually stand when you light one is forty-five degrees overhead and
+straight out of frame. A sign you have to crane at is not a sign.
+
+**A stem.** Without one the plate hangs above the obelisk with nothing holding
+it and reads as an overlay dropped on the scene. The stem is drawn into the
+same canvas rather than built as geometry, so it billboards with the plate and
+can never end up pointing off at an angle as you come round.
+
+**The bloom pass.** A large dark rectangle appeared around every banner,
+blotting out the stars behind it. Not the banner: the texture measures alpha 0
+outside the plate, and rendering without post-processing is clean. The selective
+bloom pass paints every non-emissive material opaque black before its render,
+and an opaque black quad contributes no light of its own but hides everything
+behind it from the bloom buffer — against a starfield that reads as a hard
+panel exactly the size of the sign. Flagged objects are now taken out of that
+pass rather than painted, per object rather than by testing `transparent`,
+because the atmosphere and the monument beams are transparent too and both
+belong in it.
+
+The banner says OPEN PROJECT, so it is openable — a call to action that does
+nothing when pressed is worse than none, and on a portfolio this is the one
+click the whole piece exists to earn. Guarded against the drag that steers the
+marble, since the same pointer stream does both: under six pixels and under
+four hundred milliseconds is a click, anything else was you driving. Verified
+both ways — a click opens the real URL, a drag across the same point opens
+nothing.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time

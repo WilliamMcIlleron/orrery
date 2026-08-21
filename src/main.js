@@ -7,6 +7,7 @@ import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
 import { setPassOpen, passDirection } from "./terrain-features.js";
 import { fadeClusters, ringCluster } from "./landmarks.js";
+import { seesOverHorizon, orthonormalise } from "./geometry.js";
 import { readBest, submit, formatTime } from "./records.js";
 import { Input, isControlTarget } from "./input.js";
 import { Marble } from "./marble.js";
@@ -323,6 +324,91 @@ function stepClosing(dt) {
     if (c.t >= 1) closing.splice(i, 1);
   }
 }
+
+const _pv = new THREE.Vector3();
+const _pr = new THREE.Vector3();
+const _pu = new THREE.Vector3();
+const _pm = new THREE.Matrix4();
+
+/**
+ * Stand the project banners up and turn them to face you.
+ *
+ * Billboarded around the planet's local up rather than with lookAt, which
+ * would roll them to match the camera and leave a sign lying on its side
+ * whenever you approached one along the curve.
+ *
+ * They fade with distance and vanish over the horizon on the same test the
+ * markers use, so the far side of the planet is not a wall of floating type.
+ */
+function updatePlaques() {
+  for (const m of monuments) {
+    const p = m.plaque;
+    if (!p) continue;
+
+    if (m.t <= 0.002) { p.visible = false; continue; }
+
+    _pu.copy(p.userData.up);
+    // Rises as it lights, so it reads as being raised rather than switched on.
+    p.position.copy(p.userData.at).addScaledVector(_pu, (1 - m.t) * -2.2);
+
+    const dist = p.position.distanceTo(camera.position);
+    const seen = seesOverHorizon(p.position, camera.position);
+    // Full strength up close, gone by the time it would be unreadable anyway.
+    const near = 1 - Math.min(1, Math.max(0, (dist - 46) / 40));
+    const o = m.t * near * (seen ? 1 : 0);
+    if (o <= 0.004) { p.visible = false; continue; }
+
+    p.visible = true;
+    p.material.opacity = o;
+
+    _pv.subVectors(camera.position, p.position);
+    orthonormalise(_pv, _pu);
+    _pr.crossVectors(_pu, _pv).normalize();
+    _pm.makeBasis(_pr, _pu, _pv);
+    p.quaternion.setFromRotationMatrix(_pm);
+  }
+}
+
+/*
+ * Clicking a banner opens the project.
+ *
+ * The banner says OPEN PROJECT, so it has to be openable — a call to action
+ * that does nothing when you press it is worse than no call to action, and on
+ * a portfolio this is the one click the whole piece exists to earn.
+ *
+ * Guarded against the drag that steers the marble: the same pointer stream
+ * does both, and a link that fires at the end of every camera swing would make
+ * the piece unusable. Under six pixels and under four hundred milliseconds is
+ * a click; anything else was you driving.
+ */
+const _ray = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+let _pressAt = null;
+
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  _pressAt = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+
+renderer.domElement.addEventListener("pointerup", (e) => {
+  const p = _pressAt;
+  _pressAt = null;
+  if (!p) return;
+  if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) return;
+  if (performance.now() - p.t > 400) return;
+
+  _ndc.x = (e.clientX / innerWidth) * 2 - 1;
+  _ndc.y = -(e.clientY / innerHeight) * 2 + 1;
+  _ray.setFromCamera(_ndc, camera);
+
+  const targets = monuments.filter((m) => m.lit && m.href && m.plaque?.visible);
+  const hit = _ray.intersectObjects(targets.map((m) => m.plaque), false)[0];
+  if (!hit) return;
+  const m = targets.find((x) => x.plaque === hit.object);
+  if (!m) return;
+  // Same shape as the marker link: a new tab, and no window.opener handed to
+  // whatever is on the other end.
+  window.open(m.href, "_blank", "noopener,noreferrer");
+});
 
 const crystalsEl = document.getElementById("crystals");
 let crystalFlash = 0;
@@ -810,6 +896,7 @@ function frame(now) {
   }
 
   stepClosing(wall);
+  updatePlaques();
 
   if (crystalFlash > 0) {
     crystalFlash -= wall;
