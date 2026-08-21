@@ -1113,3 +1113,117 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   #crystals { transition: none; }
 }
+
+/*
+ * The leaderboard entry.
+ *
+ * Built on the same glass as the other panels rather than a new surface: it
+ * appears at the one moment the piece has already stopped, and a card that
+ * looked like a different application would break that.
+ */
+#board {
+  position: fixed;
+  z-index: 9;
+  left: 50%;
+  bottom: calc(max(20px, env(safe-area-inset-bottom)) + 92px);
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px 16px;
+  border-radius: 14px;
+  background: var(--glass);
+  border: 1px solid var(--ink-faint);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  animation: boardIn 0.5s var(--ease) both;
+}
+
+#board[hidden] { display: none; }
+
+@keyframes boardIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+#board h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+#board-time {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink-done);
+  font-variant-numeric: tabular-nums;
+}
+
+#board label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+#board input {
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--ink-done);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ink-faint);
+  border-radius: 8px;
+  /* 44px so it is a real target on a phone, which is where this gets used. */
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+#board input::placeholder { color: var(--ink-faint); }
+
+#board input:focus-visible,
+#board button:focus-visible {
+  outline: 2px solid var(--ink-done);
+  outline-offset: 2px;
+}
+
+.board-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#board button {
+  flex: 1;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--ink-done);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--ink-faint);
+  transition: background 0.25s var(--ease);
+}
+
+#board button:hover { background: rgba(255, 255, 255, 0.13); }
+#board #board-skip { color: var(--ink); background: transparent; }
+
+#board-note {
+  margin: 4px 0 0;
+  min-height: 13px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #board { animation: none; }
+}

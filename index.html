@@ -116,6 +116,28 @@
 <button type="button" id="jump" aria-label="Jump"><span>jump</span></button>
 <button type="button" id="again" hidden>again</button>
 
+<!--
+  The leaderboard entry, offered only once a run is finished.
+
+  Two fields and a way out. Anything longer than this at the end of a
+  ninety-second piece is a form, and nobody fills in a form to finish a toy.
+-->
+<form id="board" hidden aria-labelledby="board-head">
+  <h2 id="board-head">put it on the stone</h2>
+  <p id="board-time"></p>
+  <label for="board-name">name</label>
+  <input id="board-name" name="name" type="text" maxlength="18" autocomplete="off"
+         spellcheck="false" enterkeyhint="next" required>
+  <label for="board-place">where from</label>
+  <input id="board-place" name="place" type="text" maxlength="20" autocomplete="off"
+         spellcheck="false" enterkeyhint="done" placeholder="optional">
+  <div class="board-row">
+    <button type="submit" id="board-send">carve it</button>
+    <button type="button" id="board-skip">not this time</button>
+  </div>
+  <p id="board-note" role="status" aria-live="polite"></p>
+</form>
+
 <script type="importmap">
 {
   "imports": {

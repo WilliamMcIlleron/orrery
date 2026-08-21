@@ -850,6 +850,54 @@ four hundred milliseconds is a click, anything else was you driving. Verified
 both ways — a click opens the real URL, a drag across the same point opens
 nothing.
 
+### The leaderboard is a stone
+
+A scoreboard drawn over the top of the screen would be a different application
+wearing this one's clothes. The times belong to the planet, so they are cut
+into a stone standing near the pole you drop in at — which means you read them
+by driving up to them, and you meet them before your first run as well as
+after it. Inscribed on both faces, because a stone with a back is a stone half
+the people who find it will walk round and learn nothing from.
+
+It ships working. With no credentials filled in it keeps times in
+localStorage and says so on the stone — *your times, this device* — because
+calling that a leaderboard would be a small lie carved three metres tall. Fill
+in a Supabase project URL and anon key in `src/leaderboard.js` and the same
+calls go global; the SQL for the table is in the comment above them. Nothing
+else changes.
+
+The insert policy is deliberately open, which means a determined person can
+post a fake time. That is the trade for a piece that should be playable in ten
+seconds with no account. What the checks do is bound the nonsense:
+
+| | |
+| --- | --- |
+| characters | allowlist — letters, digits, space, `' . -`, nothing else |
+| length | 18 for a name, 20 for a place |
+| words | a small blocklist, matched after stripping non-letters so `f u c k` fails too |
+| time | at least 9s, under an hour |
+| rate | one submission per 20 seconds |
+
+The character rule is an allowlist rather than a blocklist because
+zero-width joiners, combining marks and right-to-left overrides are all ways to
+make a short string do things a canvas will faithfully draw three metres tall.
+Verified: `Will‮evil` comes out `Willevil`, `<img src=x onerror=1>` comes out
+inert, emoji vanish — and `José Ndlovu` survives intact, which matters more
+than any of the rest.
+
+The time floor is derived, not guessed. The planet is about 188 units round,
+the monuments sit roughly a quarter of that apart, and the shortest tour is on
+the order of 150 units of ground — about eleven and a half seconds at full
+speed before acceleration, terrain, or the ridges now lying across every route.
+An earlier version of the check only rejected zero and negative, and waved a
+0.01 second run straight through.
+
+**A bug this found.** Pressing `p` cycles the palette and reloads the page, and
+that shortcut had no guard against being typed into a field — the `Space` one
+did, but `p` and `Enter` did not, because until there was a form to type in it
+had never mattered. Every Peter, Philip and Precious who tried to enter a name
+would have watched their finished run disappear at the third letter.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time

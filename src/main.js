@@ -6,6 +6,7 @@ import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./pale
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
 import { setPassOpen, passDirection } from "./terrain-features.js";
+import { submitScore, topScores, isRemote, cleanName, cleanPlace } from "./leaderboard.js";
 import { fadeClusters, ringCluster } from "./landmarks.js";
 import { seesOverHorizon, orthonormalise } from "./geometry.js";
 import { readBest, submit, formatTime } from "./records.js";
@@ -47,7 +48,7 @@ document.getElementById("loading")?.remove();
 
 /* ------------------------------------------------------------------- world */
 
-const { capsules, monuments, lamp, handles, crystalClusters, rebuildPlanet } =
+const { capsules, monuments, lamp, handles, crystalClusters, rebuildPlanet, stele } =
   buildWorld(scene, P, CONTENT);
 const atmosphere = createAtmosphere(scene, P);
 const post = new Post(renderer, scene, camera, P);
@@ -410,6 +411,75 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   window.open(m.href, "_blank", "noopener,noreferrer");
 });
 
+/* ------------------------------------------------------------- leaderboard */
+
+const boardEl = document.getElementById("board");
+const boardTimeEl = document.getElementById("board-time");
+const boardNameEl = document.getElementById("board-name");
+const boardPlaceEl = document.getElementById("board-place");
+const boardNoteEl = document.getElementById("board-note");
+const boardSkipEl = document.getElementById("board-skip");
+
+/**
+ * Say plainly what the board is.
+ *
+ * Without credentials it is your own times on your own machine, and calling
+ * that a leaderboard would be a small lie carved three metres tall.
+ */
+const BOARD_NOTE = isRemote() ? "everyone who has played" : "your times, this device";
+
+const NAME_KEY = "syzygy.who";
+
+/** Re-read the board and re-cut the stone. */
+async function refreshBoard() {
+  try {
+    stele.refresh(await topScores(8), BOARD_NOTE);
+  } catch {
+    stele.refresh([], BOARD_NOTE);
+  }
+}
+
+refreshBoard();
+
+/** Offer the entry form. Only ever called on a finished run. */
+function offerBoard(secs, crystals) {
+  if (!boardEl) return;
+  boardEl.dataset.secs = String(secs);
+  boardEl.dataset.crystals = String(crystals);
+  if (boardTimeEl) boardTimeEl.textContent = `${formatTime(secs)}  ·  ${crystals} crystals`;
+  // Whoever they said they were last time. Saves retyping on a second run and
+  // is the only thing this piece remembers about anyone.
+  if (boardNameEl && !boardNameEl.value) {
+    boardNameEl.value = localStorage.getItem(NAME_KEY) || "";
+  }
+  boardEl.hidden = false;
+}
+
+boardSkipEl?.addEventListener("click", () => { boardEl.hidden = true; });
+
+boardEl?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const send = document.getElementById("board-send");
+  if (send) send.disabled = true;
+  if (boardNoteEl) boardNoteEl.textContent = "cutting…";
+
+  const res = await submitScore({
+    name: cleanName(boardNameEl?.value),
+    place: cleanPlace(boardPlaceEl?.value),
+    secs: Number(boardEl.dataset.secs),
+    crystals: Number(boardEl.dataset.crystals),
+  });
+
+  if (send) send.disabled = false;
+  if (!res.ok) {
+    if (boardNoteEl) boardNoteEl.textContent = res.why ?? "no.";
+    return;
+  }
+  localStorage.setItem(NAME_KEY, cleanName(boardNameEl?.value));
+  boardEl.hidden = true;
+  await refreshBoard();
+});
+
 const crystalsEl = document.getElementById("crystals");
 let crystalFlash = 0;
 
@@ -509,6 +579,7 @@ const progression = new Progression(monuments, {
         : `${formatTime(secs)}${best !== null && best < secs ? `  ·  best ${formatTime(best)}` : ""}${found}`;
     }
     if (againBtn) againBtn.hidden = false;
+    if (runStart) offerBoard(runElapsed, rung.size);
 
     /*
      * Aim the terminator.
@@ -631,6 +702,17 @@ if (palBar) {
 }
 addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() !== "p") return;
+  /*
+   * Not while something is being typed into.
+   *
+   * This shortcut reloads the page, and the leaderboard asks for a name. Every
+   * Peter, Philip and Precious who tried to enter one lost their finished run
+   * the moment they reached the p — the page simply went away and came back
+   * with an empty board. The Space shortcut already had this guard; this one
+   * and the Enter one below did not, and the field that made it matter did not
+   * exist until now.
+   */
+  if (isControlTarget(e.target)) return;
   const keys = Object.keys(PALETTES);
   location.hash = keys[(keys.indexOf(paletteKey) + 1) % keys.length];
   location.reload();
@@ -756,6 +838,9 @@ function updateMarker() {
 // without a pointer at all.
 addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
+  // Enter inside the leaderboard form submits it; it must not also open
+  // whatever monument happens to be nearby.
+  if (isControlTarget(e.target)) return;
   if (focused?.lit && focused.href) window.open(focused.href, "_blank", "noopener");
 });
 
@@ -1007,7 +1092,7 @@ addEventListener("resize", () => {
 if (location.search.includes("dev")) {
   window.__syzygy = {
     marble, monuments, progression, audio, scene, renderer, handles, P, crystalClusters,
-    rebuildPlanet,
+    rebuildPlanet, stele,
     camera, chase, wayfinder, capsules, post, atmosphere,
     /** Drop the marble next to monument `i`, on the surface. */
     warpTo(i) {

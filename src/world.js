@@ -5,6 +5,7 @@ import { makeBloomable } from "./postfx.js";
 import { createSky } from "./sky.js";
 import { makeBoulder, scatterLandmarks } from "./landmarks.js";
 import { makePlaque } from "./plaque.js";
+import { makeStele } from "./stele.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface, groundRadius, closestOnSegment } from "./geometry.js";
 
@@ -602,6 +603,22 @@ export function buildWorld(scene, P, content) {
   );
 
   /*
+   * The leaderboard stone.
+   *
+   * Placed near the pole you drop in at rather than out in the world, so it is
+   * the first thing you meet and the thing you come back to. Built here, ahead
+   * of the occlusion bake, so its capsule is in the list when the bake runs and
+   * it gets welded to the ground like everything else standing on it.
+   */
+  const stele = makeStele(
+    scene,
+    surface(74, 40).normalize(),
+    P.accents?.[0] ?? 0xffffff,
+    rockMat,
+    capsules,
+  );
+
+  /*
    * Bake ambient occlusion into the vertex colours the height tint already uses.
    *
    * The shadow map only darkens ground the sun reaches, and half this planet
@@ -682,6 +699,7 @@ export function buildWorld(scene, P, content) {
 
   return {
     rebuildPlanet,
+    stele,
     capsules,
     monuments,
     lamp,
