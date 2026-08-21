@@ -126,6 +126,14 @@ const RIDGE_H = 2.0;
  */
 const RIDGE_W = 3.2;
 
+/**
+ * How much of the crest the pass cuts away, when the pass is fully open.
+ *
+ * 0.55 leaves it at 0.9, under the 1.54 a rolling marble can climb, so an open
+ * pass can be taken flat out without jumping at all.
+ */
+const NOTCH_CUT = 0.55;
+
 for (const route of ROUTES) {
   const ridgeMid = dirOf(route.lat, route.lon);
 
@@ -176,7 +184,7 @@ for (const route of ROUTES) {
      */
     notchAt: 0.3,
     notchWide: 0.16,
-    notchCut: 0.55,
+    notchCut: NOTCH_CUT,
 
     // Cheap reject: skip unless the point is within this angle of the
     // midpoint. Evaluated 120 times a second plus once per vertex.
@@ -261,3 +269,37 @@ function closestOnArc(a, b, p, out) {
 
 /** Exported for the tests and for anything that wants to draw the routes. */
 export { FEATURES, ROUTES };
+
+/**
+ * Close a pass, or reopen it.
+ *
+ * The planet is supposed to answer for itself as you light it. Lighting the
+ * monument at the start of a route seals the pass on the route leading out of
+ * it, so the way ahead is a wall where the way in was a gap: the first
+ * crossing can be rolled, the last has to be jumped, and the difference is
+ * something you watch the ground do rather than something a caption tells you.
+ *
+ * `open` is 1 for a gap and 0 for solid wall, and everything between is a
+ * frame of the pass filling in. Callers animate it. Anything that reads
+ * groundRadius() after this sees the new ground immediately — including the
+ * collider, which is the point — so the mesh has to be rebuilt in the same
+ * breath or the marble starts hitting geometry that is not drawn.
+ */
+export function setPassOpen(routeIndex, open) {
+  const F = FEATURES[routeIndex];
+  if (!F) return;
+  F.notchCut = NOTCH_CUT * Math.min(1, Math.max(0, open));
+}
+
+/**
+ * Unit direction of a route's pass.
+ *
+ * Callers need it to know which patch of ground moved when the pass seals, so
+ * the mesh rebuild can touch that patch and leave the rest of the planet
+ * alone.
+ */
+export function passDirection(routeIndex, out = new THREE.Vector3()) {
+  const F = FEATURES[routeIndex];
+  if (!F) return out.set(0, 1, 0);
+  return out.copy(F.a).lerp(F.b, F.notchAt).normalize();
+}

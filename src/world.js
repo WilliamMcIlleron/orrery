@@ -168,38 +168,110 @@ export function buildWorld(scene, P, content) {
     return Number.isFinite(q) && q >= 1 && q <= 24 ? q : PLANET_DETAIL;
   })();
   const planetGeo = new THREE.IcosahedronGeometry(R, DETAIL);
-  {
+
+  /*
+   * Push every vertex out to the ground and tint it by height.
+   *
+   * A function rather than a block because the ground moves now: closing a
+   * pass changes groundRadius(), and a landform the marble collides with has
+   * to be a landform the mesh shows. Safe to call repeatedly — displacement is
+   * radial, so normalising an already-displaced vertex recovers exactly the
+   * direction it started from, and the second call lands in the same place the
+   * first one would have.
+   */
+  const _shade = new Float32Array(planetGeo.attributes.position.count * 3);
+  planetGeo.setAttribute("color", new THREE.BufferAttribute(_shade, 3));
+
+  /*
+   * Every vertex's direction from the centre, captured once.
+   *
+   * IcosahedronGeometry hands back a sphere of radius R, so at this moment the
+   * positions *are* the directions scaled by R and the whole table is one
+   * division. Worth keeping: a rebuild otherwise re-normalises to find out
+   * where each vertex points, and at three unshared vertices per face that is
+   * twenty thousand square roots to answer a question whose answer never
+   * changes. It also drops the assumption that displacement stays radial.
+   */
+  const _dirs = (() => {
     const p = planetGeo.attributes.position;
-    const shade = new Float32Array(p.count * 3);
+    const d = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      d[i * 3] = p.getX(i) / R;
+      d[i * 3 + 1] = p.getY(i) / R;
+      d[i * 3 + 2] = p.getZ(i) / R;
+    }
+    return d;
+  })();
+
+  function displacePlanet(near, cosR) {
+    const p = planetGeo.attributes.position;
+    const nrm = planetGeo.attributes.normal;
+    const shade = _shade;
     const v = new THREE.Vector3();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const e1 = new THREE.Vector3();
+    const e2 = new THREE.Vector3();
+    const fnorm = new THREE.Vector3();
     const k = P.reliefShade ?? 0.15;
 
-    for (let i = 0; i < p.count; i++) {
-      v.fromBufferAttribute(p, i).normalize();
-      const h = terrain(v.x, v.y, v.z);
-      // groundRadius, not R + h * RELIEF: the ramps and ridges live in a
-      // second term and the mesh has to carry them or the marble collides
-      // with landforms that were never drawn.
-      v.multiplyScalar(groundRadius(v));
-      p.setXYZ(i, v.x, v.y, v.z);
+    // Walked a face at a time rather than a vertex at a time, because the
+    // geometry is non-indexed — PolyhedronGeometry emits three unshared
+    // vertices per triangle — and the normal of a flat-shaded facet is a
+    // property of the face. Doing it here also avoids computeVertexNormals(),
+    // which has no idea only a handful of triangles moved.
+    for (let i = 0; i < p.count; i += 3) {
+      if (near) {
+        let touches = false;
+        for (let j = 0; j < 3 && !touches; j++) {
+          const o = (i + j) * 3;
+          if (_dirs[o] * near.x + _dirs[o + 1] * near.y + _dirs[o + 2] * near.z > cosR) {
+            touches = true;
+          }
+        }
+        if (!touches) continue;
+      }
 
-      // Vertex tint by height: high ground catches light, hollows sit in
-      // shadow. It multiplies the material colour, so the dawn transition can
-      // still recolour the ground underneath it without touching this.
-      //
-      // This is what makes relief legible in palettes where the lighting alone
-      // cannot do it. Riso is the extreme case — cream ground under a white
-      // sun produces almost no shading variation, so the terrain vanishes and
-      // you lose the ability to perceive your own speed, which is the entire
-      // reason the relief exists.
-      const s = 1 + h * k;
-      shade[i * 3] = s;
-      shade[i * 3 + 1] = s;
-      shade[i * 3 + 2] = s;
+      for (let j = 0; j < 3; j++) {
+        const o = (i + j) * 3;
+        v.set(_dirs[o], _dirs[o + 1], _dirs[o + 2]);
+        const h = terrain(v.x, v.y, v.z);
+        v.multiplyScalar(groundRadius(v));
+        p.setXYZ(i + j, v.x, v.y, v.z);
+
+        // Vertex tint by height: high ground catches light, hollows sit in
+        // shadow. It multiplies the material colour, so the dawn transition
+        // can still recolour the ground underneath it without touching this.
+        //
+        // This is what makes relief legible in palettes where the lighting
+        // alone cannot do it. Riso is the extreme case — cream ground under a
+        // white sun produces almost no shading variation, so the terrain
+        // vanishes and you lose the ability to perceive your own speed, which
+        // is the entire reason the relief exists.
+        //
+        // Note this discards any occlusion already multiplied in here, which
+        // is why a regional displacement has to re-bake the same region.
+        const s = 1 + h * k;
+        shade[(i + j) * 3] = s;
+        shade[(i + j) * 3 + 1] = s;
+        shade[(i + j) * 3 + 2] = s;
+      }
+
+      a.fromBufferAttribute(p, i);
+      b.fromBufferAttribute(p, i + 1);
+      c.fromBufferAttribute(p, i + 2);
+      e1.subVectors(b, a);
+      e2.subVectors(c, a);
+      fnorm.crossVectors(e1, e2).normalize();
+      for (let j = 0; j < 3; j++) nrm.setXYZ(i + j, fnorm.x, fnorm.y, fnorm.z);
     }
-    planetGeo.setAttribute("color", new THREE.BufferAttribute(shade, 3));
-    planetGeo.computeVertexNormals();
+
+    p.needsUpdate = true;
+    nrm.needsUpdate = true;
+    planetGeo.attributes.color.needsUpdate = true;
   }
+
   const planetMat = new THREE.MeshStandardMaterial({
     // White, because the sweep supplies the colour. Leaving the palette colour
     // here would multiply it in twice.
@@ -507,7 +579,7 @@ export function buildWorld(scene, P, content) {
    * Because it lives in the vertex colour, the dawn sweep and the palette both
    * still recolour the ground underneath it with no extra work.
    */
-  {
+  function bakePlanetAO(near, cosR) {
     const pos = planetGeo.attributes.position;
     const nrm = planetGeo.attributes.normal;
     const col = planetGeo.attributes.color;
@@ -517,6 +589,10 @@ export function buildWorld(scene, P, content) {
     const dir = new THREE.Vector3();
 
     for (let i = 0; i < pos.count; i++) {
+      if (near) {
+        const o = i * 3;
+        if (_dirs[o] * near.x + _dirs[o + 1] * near.y + _dirs[o + 2] * near.z < cosR) continue;
+      }
       v.fromBufferAttribute(pos, i);
       n.fromBufferAttribute(nrm, i);
       let ao = 1;
@@ -546,7 +622,31 @@ export function buildWorld(scene, P, content) {
     col.needsUpdate = true;
   }
 
+  /**
+   * Rebuild the ground after groundRadius() has changed underneath it.
+   *
+   * `near` is a unit direction and `radius` a distance in world units; pass
+   * them and only the facets within that cap are touched. This is not an
+   * optimisation so much as the difference between shipping the feature and
+   * not: a whole-planet pass costs 14.5ms of plain JavaScript before the
+   * occlusion bake, and the occlusion bake is 176ms on its own against 118
+   * capsules. Run every frame of a one-and-a-half second animation, that is
+   * not a rebuild, it is a stall.
+   *
+   * A sealing pass moves a disc about seven units across. Everything else on
+   * the planet is already where it should be.
+   */
+  function rebuildPlanet(near = null, radius = 0) {
+    const cosR = near ? Math.cos(Math.min(Math.PI, radius / R)) : -1;
+    displacePlanet(near, cosR);
+    bakePlanetAO(near, cosR);
+  }
+
+  displacePlanet();
+  bakePlanetAO();
+
   return {
+    rebuildPlanet,
     capsules,
     monuments,
     lamp,

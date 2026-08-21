@@ -686,6 +686,58 @@ three of them. 3380 triangles against 1620 — nothing on a GPU, and the softwar
 renderer the tests run under is too noisy to resolve it (257, 284 and 264ms
 across repeats of the same two builds).
 
+### The planet answers back
+
+Lighting a monument used to move the palette and nothing else. The fourth trip
+was the first trip again, with a different colour grade.
+
+Now lighting a monument seals the pass on the route leading out of it. The way
+ahead becomes a wall where the way in was a gap: the first crossing can be
+rolled straight through, the last has to be jumped. Nothing announces it — you
+watch the ground close over about a second and a half.
+
+Measured at the pass, driving straight at it:
+
+| pass | rolling | jumping |
+| --- | --- | --- |
+| open | through in 1.8s | 1.7s |
+| half closed | through in 2.0s | 1.7s |
+| sealed | **stuck for 72s** | 1.7s |
+
+Closing is non-linear on purpose — it seals at the very end rather than
+tightening evenly — so the moment it stops being a route is a moment, not a
+gradual souring.
+
+The awkward part is that the ground has to *move*. The collider reads
+`groundRadius()` directly, so the instant a pass narrows the marble is already
+standing on the new ground; if the mesh has not caught up in the same frame,
+it is bouncing off geometry nobody drew. So the planet is rebuilt live, and the
+first attempt at that was unshippable:
+
+| | cost |
+| --- | --- |
+| whole planet, displacement only | 14.5ms |
+| whole planet, with the occlusion bake | 176ms |
+| the ground that actually moved | **2.8ms** |
+
+Two things got it there. The rebuild takes a direction and a radius and only
+touches facets inside that cap — a sealing pass moves a disc about seven units
+across, and the rest of the planet is already where it should be. And every
+vertex's direction from the centre is now cached at build time: the geometry is
+non-indexed, three unshared vertices per face, so 3380 triangles is 10,140
+vertices, and re-normalising them to find out where they point was twenty
+thousand square roots spent answering a question whose answer never changes.
+That alone took it from 4.7ms to 2.8.
+
+Displacement walks faces rather than vertices and writes the face normal
+directly, which also drops `computeVertexNormals()` — it has no idea that only
+a hundred triangles moved.
+
+One trap worth naming: the rebuild has to happen *before* a finished animation
+is retired from the list, not after. Retiring it first seals the collider and
+leaves the final, fully sealed frame undrawn — the one frame where the mismatch
+is largest.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time

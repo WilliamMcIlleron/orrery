@@ -3,6 +3,7 @@ import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE, HIT_STOP } from "./con
 import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
+import { setPassOpen, passDirection } from "./terrain-features.js";
 import { fadeClusters, ringCluster } from "./landmarks.js";
 import { readBest, submit, formatTime } from "./records.js";
 import { Input, isControlTarget } from "./input.js";
@@ -43,7 +44,8 @@ document.getElementById("loading")?.remove();
 
 /* ------------------------------------------------------------------- world */
 
-const { capsules, monuments, lamp, handles, crystalClusters } = buildWorld(scene, P, CONTENT);
+const { capsules, monuments, lamp, handles, crystalClusters, rebuildPlanet } =
+  buildWorld(scene, P, CONTENT);
 const atmosphere = createAtmosphere(scene, P);
 const post = new Post(renderer, scene, camera, P);
 const marble = new Marble(scene, P);
@@ -251,12 +253,69 @@ if (againBtn) {
   againBtn.addEventListener("click", () => location.reload());
 }
 
+/*
+ * The planet answering back.
+ *
+ * Each ridge has a pass through it, and lighting a monument seals the pass on
+ * the route leading out of that monument. The way ahead becomes a wall where
+ * the way in was a gap, so the first crossing can be rolled straight through
+ * and the last has to be jumped. Nothing says so — you watch the ground close.
+ *
+ * Held here rather than in Progression because it is a fact about the world,
+ * not about the counting, and because the animation has to be driven from the
+ * frame loop alongside the mesh rebuild that makes it visible.
+ */
+const CLOSE_SECONDS = 1.4;
+const closing = [];
+
+/**
+ * How far the ground moves when a pass fills in, in world units.
+ *
+ * The notch spans 0.16 of a ridge's length and the crest profile reaches
+ * 3.2 either side, so seven covers the moving ground and its falloff with
+ * room. It is the radius the mesh rebuild is restricted to.
+ */
+const SEAL_RADIUS = 7;
+
+function sealRoute(index) {
+  if (closing.some((c) => c.index === index)) return;
+  closing.push({ index, t: 0, dir: passDirection(index) });
+}
+
+/** Advance any pass that is filling in, and move the ground to match. */
+function stepClosing(dt) {
+  if (!closing.length) return;
+  for (let i = closing.length - 1; i >= 0; i--) {
+    const c = closing[i];
+    c.t = Math.min(1, c.t + dt / CLOSE_SECONDS);
+    // Ease out, so the pass narrows quickly and the last of it settles.
+    const e = 1 - (1 - c.t) * (1 - c.t);
+    setPassOpen(c.index, 1 - e);
+
+    // Rebuilt before the entry is retired, not after. The collider reads
+    // groundRadius() directly and is already standing on the new ground this
+    // frame, so the mesh has to catch up in the same frame or the marble
+    // bounces off geometry nobody drew — and dropping the entry first leaves
+    // the final, fully sealed frame undrawn, which is the one that matters.
+    //
+    // Only the ground that moved is rebuilt: a whole-planet pass costs 14.5ms
+    // before occlusion and 176ms with it, which is a stall, not an animation.
+    rebuildPlanet(c.dir, SEAL_RADIUS);
+
+    if (c.t >= 1) closing.splice(i, 1);
+  }
+}
+
 const progression = new Progression(monuments, {
   onApproach: () => audio.threshold(),
   onLight: (index, lit, total) => {
     audio.chime(lit - 1);
     renderProgress(lit, total);
     wayfinder.reset();
+    sealRoute(index);
+    // Short: the nine-second default belongs to dawn, and a second one under
+    // every chime would turn the whole piece into one continuous pad.
+    audio.swell(2.2);
   },
   onComplete: () => {
     /*
@@ -645,6 +704,8 @@ function frame(now) {
     lastDawn = dawn;
   }
 
+  stepClosing(wall);
+
   if (marble.jumped) {
     marble.jumped = false;
     audio.jump();
@@ -733,6 +794,7 @@ addEventListener("resize", () => {
 if (location.search.includes("dev")) {
   window.__syzygy = {
     marble, monuments, progression, audio, scene, renderer, handles, P, crystalClusters,
+    rebuildPlanet,
     camera, chase, wayfinder, capsules, post, atmosphere,
     /** Drop the marble next to monument `i`, on the surface. */
     warpTo(i) {
