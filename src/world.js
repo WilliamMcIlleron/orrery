@@ -514,7 +514,21 @@ export function buildWorld(scene, P, content) {
     const lat = (rand() - 0.5) * 150;
     const lon = rand() * 360;
     const rad = 0.7 + rand() * 1.9;
-    const c = surface(lat, lon).setLength(R + rad * 0.45);
+    /*
+     * Seated on the ground, not at a fixed distance from the core.
+     *
+     * This read `.setLength(R + rad * 0.45)`, which throws away the terrain
+     * height that surface() had just worked out and puts every rock at the
+     * same radius regardless of what is under it. The relief swings 1.5 either
+     * way, so a boulder in a hollow floated by up to that much and one on a
+     * rise was swallowed. Reported as rocks not attached to the ground, and
+     * they were not.
+     *
+     * The 0.45 stays: it buries the rock by a bit over half its radius, which
+     * is what stops a sphere reading as a ball resting on a plane.
+     */
+    const dir = surface(lat, lon).normalize();
+    const c = dir.clone().multiplyScalar(groundRadius(dir) + rad * 0.45);
 
     // Keep a gap of both radii plus a margin, so rocks read as separate
     // objects and there is always a way through between them.

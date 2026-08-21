@@ -53,6 +53,8 @@ function addMerged(scene, parts, mat, { bloom = false } = {}) {
   return mesh;
 }
 
+const _seat = new THREE.Vector3();
+
 /** Places a point on the displaced ground under a unit direction. */
 function onGround(dir, lift = 0) {
   return dir.clone().multiplyScalar(groundRadius(dir) + lift);
@@ -168,7 +170,6 @@ function stoneCircle(scene, mat, dir, rand, capsules, out) {
  * line of special-case code.
  */
 function arch(scene, mat, dir, rand, capsules, out) {
-  const centre = onGround(dir);
   const up = dir.clone().normalize();
   const east = new THREE.Vector3(0, 1, 0).cross(up).normalize();
   const north = new THREE.Vector3().crossVectors(up, east).normalize();
@@ -177,6 +178,27 @@ function arch(scene, mat, dir, rand, capsules, out) {
   const across = east.clone().multiplyScalar(Math.cos(spin)).addScaledVector(north, Math.sin(spin));
 
   const span = 4.2 + rand() * 2.2;
+
+  /*
+   * Seated on the lower of its two feet.
+   *
+   * An arch is rigid and its legs land up to six units either side of the
+   * point it is placed at, so seating it on the ground under its *centre* left
+   * a leg hanging wherever the terrain fell away underneath — which is most
+   * places, since the relief swings 1.5 over that distance. Taking the lower
+   * foot buries the higher one instead, and buried is invisible where floating
+   * is not.
+   *
+   * Sampled at the feet rather than over a disc: a disc of this radius would
+   * find the lowest ground anywhere near the arch and sink the whole thing
+   * into it.
+   */
+  const footA = up.clone().addScaledVector(across, span / R).normalize();
+  const footB = up.clone().addScaledVector(across, -span / R).normalize();
+  const centre = up.clone().multiplyScalar(
+    Math.min(groundRadius(up), groundRadius(footA), groundRadius(footB)),
+  );
+
   const rise = span * (0.95 + rand() * 0.3);
   const thick = 0.42 + rand() * 0.2;
   // Enough segments that the steps between them read as courses of masonry
@@ -250,6 +272,10 @@ function crystals(scene, mat, dir, rand, capsules, out, clusters) {
     const foot = centre.clone()
       .addScaledVector(east, Math.cos(a) * off)
       .addScaledVector(north, Math.sin(a) * off);
+    // Each shard re-seated on the ground under itself. Offsetting from the
+    // cluster's centre carries the centre's ground height with it, and a
+    // shard 1.7 units out on a slope stands on nothing.
+    foot.setLength(groundRadius(_seat.copy(foot).normalize()) - 0.3);
     const h = 1.1 + rand() * 2.2;
     const w = 0.26 + rand() * 0.24;
 
