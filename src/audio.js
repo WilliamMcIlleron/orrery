@@ -589,11 +589,16 @@ export class Audio {
   /** Coming back down: a knock with a low body under it. */
   land(strength) {
     if (!this.ready || this.muted) return;
-    this.knock(strength * 0.85);
+    this.knock(strength * 0.6);
 
     const ctx = this.ctx;
     const t = ctx.currentTime;
-    const amp = Math.min(1, strength / 14);
+    // Divisor was 14, which was right while the speed cap clamped falls to 13
+    // and every landing therefore arrived at almost exactly the same speed.
+    // Falls now carry their real speed — an ordinary jump lands at 15.2 and a
+    // long drop at 27.6 — so 14 saturated the whole range to one loudness.
+    // 22 puts a routine landing at 0.69 and keeps the top for a real fall.
+    const amp = Math.min(1, strength / 22);
     if (amp < 0.12) return;
 
     const osc = ctx.createOscillator();

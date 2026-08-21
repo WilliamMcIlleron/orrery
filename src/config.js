@@ -56,6 +56,19 @@ export const BOUNCE = 0.3;
  */
 export const MAX_SPEED = 13;
 
+/**
+ * Ceiling on the component of velocity away from the planet, both ways.
+ *
+ * Not a design value — a tunnelling backstop. The collider is a penetration
+ * test, so anything that covers more than a marble radius between fixed steps
+ * can pass straight through geometry. At DT this is 0.28 units a step against
+ * a marble radius of 0.85, so it never fires in normal play; it exists for the
+ * case where a boulder launch and a fall compound.
+ *
+ * Comfortably above JUMP_SPEED, so it never touches the arc of a jump.
+ */
+export const VERT_MAX = 34;
+
 /** Chase camera. */
 export const FOV_BASE = 62;
 
@@ -110,8 +123,18 @@ export const TOUCH_RANGE = 5.2;
  * The single biggest thing traversal was missing. Rolling was the only verb;
  * now the terrain and the rocks are things you can clear, and hitting a
  * boulder at speed launches you instead of just stopping you.
+ *
+ * This read 19 while the speed cap still clamped the whole velocity vector,
+ * which meant it was never worth 19: the clamp cut it to 13 standing still and
+ * to 11 at full roll. Now that the cap applies to ground speed only, the
+ * number is honest and the arc no longer changes shape with your speed.
+ *
+ * 16 puts the apex 2.33 units up with 0.58s of air, against a relief of 1.5
+ * and a marble radius of 0.85 — it clears a crest with room, and at full speed
+ * carries you about 7 units. Straight to 19 unthrottled would have been 3.28
+ * up and floaty on a planet this small.
  */
-export const JUMP_SPEED = 19;
+export const JUMP_SPEED = 16;
 
 /**
  * Grace period after leaving the ground where a jump still counts.

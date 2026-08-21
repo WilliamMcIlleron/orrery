@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   R_COL, BALL_R, GRAVITY, ACCEL, AIR_ACCEL,
-  DRAG, ROLL_FRIC, BOUNCE, MAX_SPEED, JUMP_SPEED, COYOTE_TIME,
+  DRAG, ROLL_FRIC, BOUNCE, MAX_SPEED, VERT_MAX, JUMP_SPEED, COYOTE_TIME,
 } from "./config.js";
 import { orthonormalise, closestOnSegment, groundRadius, groundNormal } from "./geometry.js";
 import { addSurfaceNoise } from "./surface.js";
@@ -182,8 +182,31 @@ export class Marble {
       vel.addScaledVector(_vt, -ROLL_FRIC * dt * (input.x || input.y ? 0.35 : 1.0));
     }
 
-    const sp = vel.length();
-    if (sp > MAX_SPEED) vel.multiplyScalar(MAX_SPEED / sp);
+    /*
+     * Cap ground speed, not total speed.
+     *
+     * This clamped the magnitude of the whole velocity vector, and because
+     * JUMP_SPEED is larger than MAX_SPEED on its own, *every* jump tripped it.
+     * A uniform scale takes the horizontal component down with it, so pressing
+     * jump while rolling worked as a brake: measured at 34% of your speed gone
+     * from a standing jump and 46% at full roll.
+     *
+     * It throttled the impulse too, and harder the faster you were going — the
+     * jump got lower the more speed you carried into it, which is backwards.
+     *
+     * Horizontal and vertical are different quantities and want different
+     * rules. MAX_SPEED is a statement about how long the planet takes to
+     * circle, so it belongs on the tangential component alone. Vertical is
+     * gravity's business; VERT_MAX below exists only so nothing can reach a
+     * speed that steps through the ground between frames.
+     */
+    _vt.copy(vel).addScaledVector(_up, -vel.dot(_up));
+    const gs = _vt.length();
+    if (gs > MAX_SPEED) vel.addScaledVector(_vt, MAX_SPEED / gs - 1);
+
+    const vv = vel.dot(_up);
+    if (vv > VERT_MAX) vel.addScaledVector(_up, VERT_MAX - vv);
+    else if (vv < -VERT_MAX) vel.addScaledVector(_up, -VERT_MAX - vv);
 
     pos.addScaledVector(vel, dt);
 
@@ -334,6 +357,11 @@ export class Marble {
 
   /** Kick the deformation on a hard landing. Called from the impact handler. */
   squashOnLanding(strength) {
-    this._squash = Math.min(this._squash, -Math.min(0.3, strength * 0.022));
+    // 0.022 dated from when falls were clamped to 13 and the hardest landing
+    // available sat just under the 0.3 ceiling. Real fall speeds now run to
+    // 27.6, which pinned every landing at maximum squash and threw away the
+    // difference between a hop and a drop. 0.011 spreads the range back out:
+    // a routine jump lands at 0.17, a long fall still reaches the ceiling.
+    this._squash = Math.min(this._squash, -Math.min(0.3, strength * 0.011));
   }
 }

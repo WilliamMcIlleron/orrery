@@ -571,6 +571,56 @@ The offset is built as a vector and rotated, rather than as a height and a
 distance added separately, which is what keeps the marble the same size in
 frame as the view swings up and over it.
 
+### Jumping was a brake
+
+Pressing jump while rolling scrubbed most of your speed off. Measured against
+the surface tangent, before the fix:
+
+| rolling at | after the jump | lost | apex |
+| --- | --- | --- | --- |
+| standing | 0.15 | 34% | 1.54 |
+| 6.0 | 3.83 | 36% | 1.42 |
+| 9.1 | 5.37 | 41% | 1.30 |
+| 12.9 | 6.93 | 46% | 1.14 |
+
+One cause, and it was the speed cap rather than anything in the jump. The cap
+clamped the magnitude of the whole velocity vector, and `JUMP_SPEED` was larger
+than `MAX_SPEED` on its own — so every jump, from every speed, tripped it. A
+uniform scale is the only thing a magnitude clamp can do, and it takes the
+horizontal component down with it.
+
+The right-hand column is the same bug from the other side. The clamp was eating
+the impulse as well, and eating more of it the faster you went, so the jump got
+*lower* the more speed you carried into it. Read the table upwards and the
+piece was punishing you twice for the same input.
+
+Horizontal and vertical are different quantities and want different rules.
+`MAX_SPEED` is a claim about how long the planet takes to circle, which is a
+statement about ground speed, so it now applies to the tangential component
+alone. Vertical is gravity's business. `VERT_MAX` exists underneath it purely
+so that a boulder launch compounding with a long fall cannot reach a speed that
+steps through the ground between frames — at the fixed timestep it allows 0.28
+units a step against a marble radius of 0.85, and it never fires in play.
+
+After: 4-7% instead of 34-46%, and the residue is real rather than the clamp —
+rolling drag through the arc, plus the deliberate sideways carry of leaving
+along the surface normal instead of straight up. The apex no longer varies with
+speed at all.
+
+`JUMP_SPEED` came down from 19 to 16 in the same change, because 19 had never
+actually been 19: the clamp had been quietly delivering 13 of it standing still
+and 11 at speed. Unthrottling the old number would have put the apex 3.28 units
+up, which is floaty on a planet with 1.5 of relief. 16 lands at 2.33 with 0.58s
+of air, clears a crest with room, and carries about 7 units at full speed.
+
+Two response curves had been fitted to the bug and had to move with it. Falls
+were previously clamped to 13, so every landing arrived at almost exactly the
+same speed; they now range from 15.2 for a routine jump to 27.6 for the drop
+you spawn in on. The landing squash was scaled such that the hardest landing
+available sat just under its ceiling, and after the fix everything pinned at
+maximum — a hop and a drop looked identical. The landing sound had the same
+problem an octave up. Both were rescaled to the range that now exists.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time
