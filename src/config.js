@@ -203,3 +203,58 @@ export const PLANET_DETAIL = 12;
  * should look rather than by eye.
  */
 export const SUN_DIR = Object.freeze({ x: 0.5569, y: 0.7425, z: 0.3713 });
+
+/*
+ * Flow.
+ *
+ * The piece had no way to fail. You could not lose progress, lose a resource
+ * or die, so the optimal play was to hold full speed at everything and take
+ * the crashes — they cost a second and nothing else. Until that was false
+ * there was a ceiling on how much any amount of terrain could add.
+ *
+ * Flow is the thing there is to lose. Keep moving fast and it builds; rolling
+ * resistance drops as it does, so you hold speed through climbs, turns and
+ * landings that would otherwise bleed it, and the marble's own lamp brightens
+ * with it. Hit something hard enough to destroy your ground speed and all of
+ * it goes at once.
+ *
+ * It deliberately does not touch MAX_SPEED. The ridge crest was calibrated
+ * against that number — 2.0 is the lowest wall a rolling marble cannot climb —
+ * and a flow bonus that raised top speed would quietly uncalibrate every
+ * obstacle in the world.
+ */
+
+/** Fraction of MAX_SPEED you must exceed for flow to build at all. */
+export const FLOW_MIN = 0.55;
+
+/** Seconds at speed to reach full flow, and seconds below the line to lose it. */
+export const FLOW_RISE = 2.6;
+export const FLOW_FALL = 1.4;
+
+/**
+ * Ground speed lost in a single fixed step that counts as a crash.
+ *
+ * Measured against the two things it has to tell apart. Rolling friction takes
+ * about 0.02 a step, and landing from a jump barely touches ground speed at
+ * all — that is the whole point of the jump fix. Driving into a ridge takes
+ * most of ten units in one step. 3.0 sits in the empty space between them.
+ *
+ * Thresholding on raw impact instead would break flow on every landing, which
+ * would punish the exact skill the ridges exist to reward.
+ */
+export const FLOW_BREAK = 3.0;
+
+/** How much of the rolling friction and drag full flow removes. */
+export const FLOW_GRIP = 0.55;
+export const FLOW_DRAG = 0.5;
+
+/**
+ * How much brighter the marble's own lamp burns at full flow.
+ *
+ * The mechanic is invisible otherwise. Rolling resistance is a number you feel
+ * only in aggregate, so the meter needs a read you cannot miss, and a marble
+ * that is literally the light source in a dark world already has one. Kept
+ * this side of doubling — the marble under its own lamp is the brightest thing
+ * on screen and bloom will happily turn it into a fireball.
+ */
+export const FLOW_LAMP = 0.9;

@@ -738,6 +738,51 @@ is retired from the list, not after. Retiring it first seals the collider and
 leaves the final, fully sealed frame undrawn — the one frame where the mismatch
 is largest.
 
+### Flow, and how to tell a crash from a landing
+
+There was nothing to lose. You could not lose progress, lose a resource or
+die, so the optimal play was to hold full speed at everything and eat the
+crashes — they cost a second and nothing else.
+
+Flow is the thing there is to lose. Hold speed and it builds over about three
+seconds; as it does, rolling resistance drops, so you keep speed through the
+climbs, turns and landings that would otherwise bleed it, and the marble's own
+lamp burns up to 90% brighter. Hit something hard enough to destroy your ground
+speed and all of it goes at once.
+
+It deliberately leaves `MAX_SPEED` alone. The ridge crest was calibrated
+against that number, and a flow bonus that raised top speed would quietly
+uncalibrate every obstacle on the planet.
+
+The hard part was deciding what counts as a crash, and two obvious answers are
+both wrong.
+
+**Impact strength** cannot tell a landing from a wall. Landing off a jump
+registers about 15 — harder than most wall hits — so thresholding on it broke
+flow every single time you used the jump the ridges exist to reward.
+
+**Ground speed lost** is closer, but measured across the whole step it also
+spans the jump, and a jump leaves along the *surface* normal. On a ten degree
+slope that 16-unit impulse moves ground speed by 2.8 and trips a 3.0 threshold.
+Every jump still broke flow. Narrowing the window so it brackets only the
+collision response fixed that.
+
+It still fired at random on open ground, though, because rolling fast into the
+bottom of a dip legitimately loses a lot of speed. Speed lost says how hard you
+stopped; it does not say what stopped you. So the test now also asks what you
+hit: a floor's normal points roughly the way you do, a wall's does not. Under
+0.8 against local up — steeper than about thirty-seven degrees — counts. Base
+relief never gets near that; ridge flanks and rock faces are all past it.
+
+Verified by flattening the landforms and driving for a minute:
+
+| | breaks in 60s | lowest flow |
+| --- | --- | --- |
+| ridges present | 1 (the ridge it drove into) | 0.00 |
+| ridges flattened | **0** | **1.00** |
+
+Six consecutive jumps: 1.00 to 1.00, no dip. Driving into a wall: 1.00 to 0.00.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time

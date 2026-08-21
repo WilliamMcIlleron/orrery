@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE, HIT_STOP } from "./config.js";
+import {
+  DT, MAX_STEPS, LABEL_RANGE, MAX_SPEED, FOV_BASE, HIT_STOP, FLOW_LAMP,
+} from "./config.js";
 import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./palettes.js";
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
@@ -682,6 +684,16 @@ function frame(now) {
   if (lamp) {
     const d = marble.pos.length();
     lamp.position.copy(marble.pos).multiplyScalar((d + 4.2) / d);
+    // Flow reads as light. Multiplied onto the palette's own value rather than
+    // written over it, so dawn still moves the lamp underneath this.
+    lamp.intensity = paletteState.lampInt * (1 + FLOW_LAMP * marble.flow);
+  }
+
+  if (marble.flowBroke) {
+    marble.flowBroke = false;
+    // The impact that caused it is already making its own noise; this is the
+    // sound of the thing you lost, pitched under it.
+    audio.flowLost();
   }
 
   progression.update(marble.pos, wall, REDUCED_MOTION);

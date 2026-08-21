@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
   R_COL, BALL_R, GRAVITY, ACCEL, AIR_ACCEL,
   DRAG, ROLL_FRIC, BOUNCE, MAX_SPEED, VERT_MAX, JUMP_SPEED, COYOTE_TIME,
+  FLOW_MIN, FLOW_RISE, FLOW_FALL, FLOW_BREAK, FLOW_GRIP, FLOW_DRAG,
 } from "./config.js";
 import { orthonormalise, closestOnSegment, groundRadius, groundNormal } from "./geometry.js";
 import { addSurfaceNoise } from "./surface.js";
@@ -9,6 +10,12 @@ import { addSurfaceNoise } from "./surface.js";
 // Module-scope scratch vectors. Allocating inside the step would produce a few
 // hundred short-lived Vector3s a second and hand the GC a reason to stutter.
 const _up = new THREE.Vector3();
+
+/** Magnitude of the component of `v` lying in the plane perpendicular to `up`. */
+function groundSpeed(v, up) {
+  const n = v.dot(up);
+  return Math.sqrt(Math.max(0, v.lengthSq() - n * n));
+}
 const _right = new THREE.Vector3();
 const _vt = new THREE.Vector3();
 const _n = new THREE.Vector3();
@@ -117,6 +124,28 @@ export class Marble {
 
     /** Set by the input layer; consumed on the next grounded step. */
     this.jumpQueued = false;
+
+    /**
+     * Flow, 0 to 1. The thing there is to lose — see config.js.
+     *
+     * Built by holding speed, spent by crashing. Read by the renderer to
+     * brighten the lamp and by step() to lighten rolling resistance.
+     */
+    this.flow = 0;
+
+    /** True for the one step in which a crash emptied the meter. */
+    this.flowBroke = false;
+
+    /**
+     * Whether anything resolved against a steep face this step.
+     *
+     * Speed lost is not enough on its own to call something a crash: rolling
+     * fast over ordinary relief loses plenty of it at the bottom of a dip, and
+     * thresholding on that alone broke flow at random on open ground. What
+     * separates a crash from terrain is *what you hit* — a floor's normal
+     * points roughly the way you do, a wall's does not.
+     */
+    this._steepHit = false;
   }
 
   /** Request a jump. Buffered, so pressing slightly early still works. */
@@ -147,6 +176,7 @@ export class Marble {
     const { pos, vel } = this;
 
     _up.copy(pos).normalize();
+    this._steepHit = false;
 
     // Input is camera-relative, which is what makes a rolling ball feel right.
     // Steering a heading like a car would be easier to write and worse to use.
@@ -172,14 +202,20 @@ export class Marble {
     }
 
     vel.addScaledVector(_up, -GRAVITY * dt);
-    vel.multiplyScalar(1 - DRAG * dt);
+    vel.multiplyScalar(1 - DRAG * (1 - FLOW_DRAG * this.flow) * dt);
 
     if (this.grounded) {
       // Rolling friction, applied only to the tangential component — measured
       // against the contact normal, so friction on a slope acts along the
       // slope rather than across it.
+      //
+      // Flow lightens it. Since MAX_SPEED is untouched this cannot make you
+      // faster on the flat; what it does is let you keep the speed you have
+      // through the climbs, turns and landings that would otherwise bleed it,
+      // which is exactly what "flow" should mean.
       _vt.copy(vel).addScaledVector(this.groundN, -vel.dot(this.groundN));
-      vel.addScaledVector(_vt, -ROLL_FRIC * dt * (input.x || input.y ? 0.35 : 1.0));
+      const grip = ROLL_FRIC * (1 - FLOW_GRIP * this.flow);
+      vel.addScaledVector(_vt, -grip * dt * (input.x || input.y ? 0.35 : 1.0));
     }
 
     /*
@@ -208,11 +244,49 @@ export class Marble {
     if (vv > VERT_MAX) vel.addScaledVector(_up, VERT_MAX - vv);
     else if (vv < -VERT_MAX) vel.addScaledVector(_up, -VERT_MAX - vv);
 
+    /*
+     * Sampled here, not at the top of the step, so that the only thing between
+     * this reading and the one after the collisions is the collision response
+     * itself.
+     *
+     * Taken at the top it also spanned the jump, and a jump leaves along the
+     * *surface* normal — which on a slope has a component in the plane this
+     * measures, so a 16-unit impulse on a ten degree slope moved ground speed
+     * by 2.8 and tripped a 3.0 crash threshold. Every jump broke flow.
+     */
+    const gsBefore = groundSpeed(vel, _up);
+
     pos.addScaledVector(vel, dt);
 
     this.airborneFor += dt;
     this._collidePlanet();
     this._collideCapsules(capsules);
+
+    /*
+     * Flow.
+     *
+     * Judged on ground speed lost in this one step rather than on impact
+     * strength, because impact cannot tell a landing from a crash — landing
+     * off a jump registers 15, harder than most wall hits, and thresholding on
+     * it would break flow every time you used the jump the ridges exist to
+     * reward. Ground speed is the honest measure: a landing barely touches it,
+     * a wall destroys it.
+     *
+     * `flowBroke` latches rather than clearing here, the same way `jumped`
+     * does, because several fixed steps run per rendered frame and a flag
+     * cleared at the top of step() would be gone before anything could read
+     * it.
+     */
+    const gsAfter = groundSpeed(vel, _up);
+    if (gsBefore - gsAfter > FLOW_BREAK && this._steepHit) {
+      if (this.flow > 0.05) this.flowBroke = true;
+      this.flow = 0;
+    } else if (gsAfter > MAX_SPEED * FLOW_MIN) {
+      this.flow = Math.min(1, this.flow + dt / FLOW_RISE);
+    } else {
+      this.flow = Math.max(0, this.flow - dt / FLOW_FALL);
+    }
+
     this._roll(dt);
   }
 
@@ -261,6 +335,9 @@ export class Marble {
         this.landed = this.airborneFor > 0.12;
         this.hitCapsule = null;
       }
+      // Under 0.8 is steeper than about thirty-seven degrees. Base relief
+      // never approaches that; ridge flanks and rock faces are all past it.
+      if (Math.abs(_gn.dot(_rad)) < 0.8) this._steepHit = true;
       vel.addScaledVector(_gn, -vn * (1 + BOUNCE));
     }
     this.grounded = true;
@@ -280,6 +357,9 @@ export class Marble {
       pos.addScaledVector(_n, minD - d);
       const vn = vel.dot(_n);
       if (vn < 0) {
+        // Capsules stand up out of the ground, so anything you hit hard enough
+        // to matter you hit in the side. Same test as the terrain path.
+        if (Math.abs(_n.dot(_rad.copy(pos).normalize())) < 0.8) this._steepHit = true;
         /*
          * Rocks get a lower threshold than the ground: hitting one is an
          * event, whereas resting on the ground is the default state. Worked

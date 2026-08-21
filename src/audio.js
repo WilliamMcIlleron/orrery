@@ -586,6 +586,41 @@ export class Audio {
     }
   }
 
+  /**
+   * The sound of losing flow.
+   *
+   * A crash already makes its own noise — this sits underneath it and falls,
+   * so what you hear is the loss rather than the collision. Deliberately short
+   * and quiet: it fires at the exact moment the screen is already shaking, and
+   * anything longer turns a mistake into a punishment.
+   */
+  flowLost() {
+    if (!this.ready || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(74, t + 0.42);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(1400, t);
+    lp.frequency.exponentialRampToValueAtTime(240, t + 0.42);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.16, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+
+    osc.connect(lp).connect(g);
+    this._send(g, SEND.knock);
+    g.connect(this.bus);
+    osc.start(t);
+    osc.stop(t + 0.52);
+  }
+
   /** Coming back down: a knock with a low body under it. */
   land(strength) {
     if (!this.ready || this.muted) return;
