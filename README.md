@@ -859,12 +859,19 @@ by driving up to them, and you meet them before your first run as well as
 after it. Inscribed on both faces, because a stone with a back is a stone half
 the people who find it will walk round and learn nothing from.
 
-It ships working. With no credentials filled in it keeps times in
-localStorage and says so on the stone — *your times, this device* — because
-calling that a leaderboard would be a small lie carved three metres tall. Fill
-in a Supabase project URL and anon key in `src/leaderboard.js` and the same
-calls go global; the SQL for the table is in the comment above them. Nothing
-else changes.
+The Supabase project URL and anon key are in `src/leaderboard.js`, along with
+the SQL that creates the table. The anon key is committed deliberately: it is
+the key designed to be public, its JWT carries `role: anon`, and it can do
+exactly what the row-level security policies allow and nothing else. The
+service key is a different key and must never appear here.
+
+Configured is not the same as reachable, so the board has two lives and always
+says which one it is leading. If the remote read fails — missing table, paused
+project, no signal — it falls back to localStorage and the stone reads *your
+times, this device* instead of *everyone who has played*. A submission that
+cannot reach the network is written locally rather than lost, and the player is
+told plainly that is what happened. Somebody who has just finished a run and
+typed their name should not be handed nothing.
 
 The insert policy is deliberately open, which means a determined person can
 post a fake time. That is the trade for a piece that should be playable in ten

@@ -6,7 +6,9 @@ import { PALETTES, resolvePaletteKey, makePaletteState, applyDawn } from "./pale
 import { CONTENT } from "./content.js";
 import { buildWorld, applyPaletteState } from "./world.js";
 import { setPassOpen, passDirection } from "./terrain-features.js";
-import { submitScore, topScores, isRemote, cleanName, cleanPlace } from "./leaderboard.js";
+import {
+  submitScore, topScores, lastSource, cleanName, cleanPlace,
+} from "./leaderboard.js";
 import { fadeClusters, ringCluster } from "./landmarks.js";
 import { seesOverHorizon, orthonormalise } from "./geometry.js";
 import { readBest, submit, formatTime } from "./records.js";
@@ -423,20 +425,26 @@ const boardSkipEl = document.getElementById("board-skip");
 /**
  * Say plainly what the board is.
  *
- * Without credentials it is your own times on your own machine, and calling
- * that a leaderboard would be a small lie carved three metres tall.
+ * Decided after the read rather than from the configuration, because
+ * configured is not the same as reachable: the table can be missing, the
+ * project paused, the player on a train. Whichever board they are actually
+ * looking at is the one the stone names.
  */
-const BOARD_NOTE = isRemote() ? "everyone who has played" : "your times, this device";
+function boardNote() {
+  return lastSource() === "remote" ? "everyone who has played" : "your times, this device";
+}
 
 const NAME_KEY = "syzygy.who";
 
 /** Re-read the board and re-cut the stone. */
 async function refreshBoard() {
+  let rows = [];
   try {
-    stele.refresh(await topScores(8), BOARD_NOTE);
+    rows = await topScores(8);
   } catch {
-    stele.refresh([], BOARD_NOTE);
+    rows = [];
   }
+  stele.refresh(rows, boardNote());
 }
 
 refreshBoard();
@@ -476,8 +484,16 @@ boardEl?.addEventListener("submit", async (e) => {
     return;
   }
   localStorage.setItem(NAME_KEY, cleanName(boardNameEl?.value));
-  boardEl.hidden = true;
   await refreshBoard();
+
+  if (res.local) {
+    // It went somewhere, just not where they were promised. Say so, leave it
+    // up long enough to be read, and take it away on its own.
+    if (boardNoteEl) boardNoteEl.textContent = "saved here — the board is unreachable";
+    setTimeout(() => { boardEl.hidden = true; }, 2800);
+    return;
+  }
+  boardEl.hidden = true;
 });
 
 const crystalsEl = document.getElementById("crystals");

@@ -16,17 +16,25 @@
  *   1. Create a free project at supabase.com.
  *   2. Run this in its SQL editor:
  *
- *        create table scores (
+ *        create table public.scores (
  *          id         bigint generated always as identity primary key,
  *          name       text not null check (char_length(name) between 1 and 18),
- *          place      text not null check (char_length(place) between 0 and 20),
+ *          place      text not null default '' check (char_length(place) <= 20),
  *          secs       double precision not null check (secs > 0 and secs < 3600),
  *          crystals   int  not null default 0 check (crystals between 0 and 64),
  *          created_at timestamptz not null default now()
  *        );
- *        alter table scores enable row level security;
- *        create policy "anyone may read"   on scores for select using (true);
- *        create policy "anyone may insert" on scores for insert with check (true);
+ *
+ *        create index scores_secs_idx on public.scores (secs asc);
+ *
+ *        alter table public.scores enable row level security;
+ *        create policy "anyone may read"   on public.scores for select using (true);
+ *        create policy "anyone may insert" on public.scores for insert with check (true);
+ *
+ *        -- Supabase's default privileges usually cover this already; harmless
+ *        -- to state, and the difference between a working board and a 401 if
+ *        -- they were ever changed.
+ *        grant select, insert on table public.scores to anon;
  *
  *   3. Paste the project URL and the *anon* key below. The anon key is meant to
  *      be public and is safe in client source; the service key is not, and must
@@ -38,10 +46,26 @@
  * be written; the sanitising below bounds what it can say.
  */
 export const CONFIG = {
-  url: "",
-  anonKey: "",
+  url: "https://weubrhoslqpxzognwefb.supabase.co",
+  anonKey:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndldWJyaG9zbHFweHpvZ253ZWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MTU2MTMsImV4cCI6MjEwMjk5MTYxM30.HEPF8Z4_ZEbTc_F2ClTclONrQ8VHRrKcZf-dkHFHxBs",
   table: "scores",
 };
+
+/**
+ * Where the last read actually came from.
+ *
+ * Configured is not the same as reachable. The table can be missing, the
+ * project can be paused, the player can be on a train. The board says which of
+ * its two lives it is currently leading, because a stone reading "everyone who
+ * has played" while showing one person's times would be a lie carved three
+ * metres tall.
+ */
+let source = isRemote() ? "remote" : "local";
+
+export function lastSource() {
+  return source;
+}
 
 export function isRemote() {
   return Boolean(CONFIG.url && CONFIG.anonKey);
@@ -150,6 +174,13 @@ function readLocal() {
   }
 }
 
+function saveLocal(entry) {
+  const all = readLocal();
+  all.push({ ...entry, at: Date.now() });
+  all.sort((a, b) => a.secs - b.secs);
+  localStorage.setItem(KEY, JSON.stringify(all.slice(0, 50)));
+}
+
 function headers() {
   return {
     "Content-Type": "application/json",
@@ -169,11 +200,8 @@ export async function submitScore(raw) {
   localStorage.setItem(RATE_KEY, String(Date.now()));
 
   if (!isRemote()) {
-    const all = readLocal();
-    all.push({ ...entry, at: Date.now() });
-    all.sort((a, b) => a.secs - b.secs);
-    localStorage.setItem(KEY, JSON.stringify(all.slice(0, 50)));
-    return { ok: true };
+    saveLocal(entry);
+    return { ok: true, local: true };
   }
 
   try {
@@ -182,10 +210,21 @@ export async function submitScore(raw) {
       headers: { ...headers(), Prefer: "return=minimal" },
       body: JSON.stringify(entry),
     });
-    if (!res.ok) return { ok: false, why: "Could not reach the board." };
+    if (!res.ok) throw new Error(String(res.status));
+    source = "remote";
     return { ok: true };
   } catch {
-    return { ok: false, why: "Could not reach the board." };
+    /*
+     * Keep the run rather than lose it.
+     *
+     * Somebody has just finished a ninety second piece and typed their name;
+     * telling them the network ate it and offering nothing is the worst
+     * possible end. It goes on the local board instead and the caller is told
+     * plainly which board that was, so nothing pretends otherwise.
+     */
+    saveLocal(entry);
+    source = "local";
+    return { ok: true, local: true };
   }
 }
 
@@ -194,14 +233,23 @@ export async function submitScore(raw) {
  * network is unavailable — the caller draws a board either way.
  */
 export async function topScores(n = 10) {
-  if (!isRemote()) return readLocal().slice(0, n);
+  if (!isRemote()) {
+    source = "local";
+    return readLocal().slice(0, n);
+  }
   try {
     const q = `select=name,place,secs,crystals&order=secs.asc&limit=${n}`;
     const res = await fetch(`${CONFIG.url}/rest/v1/${CONFIG.table}?${q}`, { headers: headers() });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(String(res.status));
     const rows = await res.json();
-    return Array.isArray(rows) ? rows : [];
+    if (!Array.isArray(rows)) throw new Error("shape");
+    source = "remote";
+    return rows;
   } catch {
-    return [];
+    // Unreachable, missing table, paused project, no signal. Fall back rather
+    // than showing an empty stone — a local board is worth more than a dead
+    // one, and lastSource() makes sure it does not claim to be the other kind.
+    source = "local";
+    return readLocal().slice(0, n);
   }
 }
