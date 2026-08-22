@@ -303,3 +303,25 @@ export function passDirection(routeIndex, out = new THREE.Vector3()) {
   if (!F) return out.set(0, 1, 0);
   return out.copy(F.a).lerp(F.b, F.notchAt).normalize();
 }
+
+/**
+ * World-unit distance from a direction to the nearest ridge body.
+ *
+ * Negative inside a ridge, positive outside it, measured to where the crest
+ * profile has fallen to nothing. Placement uses it to keep things from
+ * standing a hair's breadth off a wall: a boulder that leaves 1.65 units
+ * between itself and a cliff has made a gap the marble cannot fit through and
+ * cannot see is too small, which is exactly the shape of a place you drive at
+ * twice and then give up on.
+ */
+export function distanceToRidge(nx, ny, nz) {
+  let best = Infinity;
+  for (let i = 0; i < FEATURES.length; i++) {
+    const F = FEATURES[i];
+    _p.set(nx, ny, nz);
+    closestOnArc(F.a, F.b, _p, _q);
+    const dot = Math.min(1, Math.max(-1, _p.dot(_q)));
+    best = Math.min(best, Math.acos(dot) * R - F.wide);
+  }
+  return best;
+}

@@ -1,5 +1,8 @@
 import * as THREE from "three";
-import { R, RELIEF, WORLD_SEED, TOUCH_RANGE, PLANET_DETAIL, SUN_DIR as SUN_DIR_RAW } from "./config.js";
+import {
+  R, RELIEF, WORLD_SEED, TOUCH_RANGE, PLANET_DETAIL, PASS_GAP,
+  SUN_DIR as SUN_DIR_RAW,
+} from "./config.js";
 import { addSurfaceNoise, makeSweep } from "./surface.js";
 import { makeBloomable } from "./postfx.js";
 import { createSky } from "./sky.js";
@@ -8,6 +11,7 @@ import { makePlaque } from "./plaque.js";
 import { makeStele } from "./stele.js";
 import { mulberry32 } from "./rng.js";
 import { terrain, surface, groundRadius, closestOnSegment } from "./geometry.js";
+import { distanceToRidge } from "./terrain-features.js";
 
 /**
  * Builds the planet, its furniture and its lighting into `scene`.
@@ -528,7 +532,19 @@ export function buildWorld(scene, P, content) {
    * wall one in. Rejecting candidates that land too close to anything already
    * placed costs a few hundred cheap distance checks and fixes both.
    */
+  /*
+   * Where the leaderboard stone will stand.
+   *
+   * Reserved here, before anything is scattered, because it is placed at a
+   * fixed spot rather than by rejection sampling — it went in blind and the
+   * first boulder that happened to land there ended up 1.57 units *inside* it.
+   * Everything else negotiates for its ground; this one has to book it.
+   */
+  const STELE_DIR = surface(74, 40).normalize();
+  const steleBase = STELE_DIR.clone().multiplyScalar(groundRadius(STELE_DIR));
+
   const placed = monuments.map((m) => ({ pos: m.base, clearance: 5.5 }));
+  placed.push({ pos: steleBase, clearance: 1.75 + PASS_GAP });
   let attempts = 0;
 
   while (placed.length < monuments.length + 26 && attempts < 900) {
@@ -552,21 +568,46 @@ export function buildWorld(scene, P, content) {
     const dir = surface(lat, lon).normalize();
     const c = dir.clone().multiplyScalar(groundRadius(dir) + rad * 0.45);
 
-    // Keep a gap of both radii plus a margin, so rocks read as separate
-    // objects and there is always a way through between them.
+    /*
+     * Built before the spacing test, not after, because the test needs to know
+     * how big the rock actually is.
+     *
+     * makeBoulder squashes each rock by up to 1.28 on an axis and then pushes
+     * its vertices out into lumps, so the radius it reports is meaningfully
+     * larger than the `rad` it was asked for. Testing against `rad` and then
+     * storing the true radius meant every rock was placed as though it were
+     * smaller than it is, and the error came straight out of the gap between
+     * it and its neighbour.
+     */
+    const { geometry, radius } = makeBoulder(rad, rand);
+
+    // Keep a gap of both true radii plus enough room to drive through, so
+    // rocks read as separate objects and every gap between them is a gap.
     let ok = true;
     for (const q of placed) {
-      if (c.distanceTo(q.pos) < q.clearance + rad + 1.2) {
+      if (c.distanceTo(q.pos) < q.clearance + radius + PASS_GAP) {
         ok = false;
         break;
       }
     }
-    if (!ok) continue;
+    /*
+     * And not parked just off a ridge.
+     *
+     * Either it touches the wall or it stands a marble clear of it; the band
+     * in between is a slot you can see into, drive at, and not fit through.
+     * Rock placement predates the ridges entirely and knew nothing about them,
+     * which left one boulder 1.65 units off a cliff.
+     */
+    const ridge = distanceToRidge(dir.x, dir.y, dir.z) - radius;
+    if (ridge > 0 && ridge < PASS_GAP) ok = false;
 
-    // Every boulder gets its own lumps and its own squash. Twenty-six copies
-    // of one icosphere is a texture, not a landscape, and the eye picks the
-    // repeat up long before it can say why.
-    const { geometry, radius } = makeBoulder(rad, rand);
+    if (!ok) {
+      // Nothing else has seen it, so give the buffers back rather than leaving
+      // one behind for every rejected candidate.
+      geometry.dispose();
+      continue;
+    }
+
     const m = new THREE.Mesh(geometry, rockMat);
     m.position.copy(c);
     m.rotation.set(rand() * 3, rand() * 3, rand() * 3);
@@ -612,7 +653,7 @@ export function buildWorld(scene, P, content) {
    */
   const stele = makeStele(
     scene,
-    surface(74, 40).normalize(),
+    STELE_DIR,
     P.accents?.[0] ?? 0xffffff,
     rockMat,
     capsules,

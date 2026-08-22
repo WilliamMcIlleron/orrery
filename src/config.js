@@ -258,3 +258,17 @@ export const FLOW_DRAG = 0.5;
  * on screen and bloom will happily turn it into a fireball.
  */
 export const FLOW_LAMP = 0.9;
+
+/**
+ * Clear ground to leave between any two separate objects, in world units.
+ *
+ * The marble is 2 * BALL_R = 1.7 across, so a gap under that is a wall wearing
+ * a gap's clothes. This is the marble plus a bit over half itself again,
+ * because a gap the exact width of the ball is not one you can take at speed
+ * on a curved surface with momentum — you need room to be slightly wrong.
+ *
+ * Every spacing rule in the world builder is written in terms of this, since
+ * the failure it prevents is always the same failure: driving at a hole you
+ * cannot fit through.
+ */
+export const PASS_GAP = 2.8;

@@ -898,6 +898,58 @@ did, but `p` and `Enter` did not, because until there was a form to type in it
 had never mattered. Every Peter, Philip and Precious who tried to enter a name
 would have watched their finished run disappear at the third letter.
 
+### Gaps you cannot fit through
+
+Reported with a screenshot: a marble wedged between two boulders, unable to get
+through the gap. It was not bad luck, it was the spacing rule, and measuring
+the whole world turned up three separate versions of the same mistake.
+
+The marble is `2 * BALL_R` = **1.7** across. Every rule that keeps two objects
+apart has to clear that, and none of them did.
+
+**Boulders.** The rule reserved `q.clearance + rad + 1.2` — a margin of 1.2
+against a ball of 1.7, so even a perfect placement left a gap the marble could
+not enter. Worse, `rad` is the radius the boulder was *asked* for, while
+`makeBoulder` squashes it by up to 1.28 on an axis and then pushes its vertices
+out into lumps. The true radius was stored as the clearance afterwards but was
+never used in the test, so every rock was placed as though smaller than it is
+and the error came straight out of the gap. The boulder is now built before the
+test rather than after it, so the test knows how big it is.
+
+**Landmarks.** The room reserved for a structure was a flat guess made before
+the structure existed: 7.0 for an arch that spans up to 6.4 either side with
+legs 0.74 thick. Measured, one arch was overlapping a boulder by 1.57 units.
+Each figure is now its kind's largest possible extent plus the gap.
+
+**The leaderboard stone**, which I had added an hour earlier, was placed at a
+fixed spot with no spacing check at all. A boulder was already standing there.
+It now books its ground before anything is scattered.
+
+Then a fourth, from measuring rather than from the report: the ridges came
+later than all of this and rock placement never knew they existed. A boulder
+1.65 units off a cliff makes a slot you can see into, drive at, and not fit
+through. The rule now is that an object either touches a ridge or stands a
+marble clear of it, never in between — except for assemblies, which have to
+clear it outright, because a stone circle allowed to straddle a wall puts half
+its uprights inside it and the rest standing 0.6, 1.2 and 1.35 off it. A row of
+slots is worse than the one that started this.
+
+All of it now reads from one constant, `PASS_GAP`, because the failure it
+prevents is always the same failure.
+
+| | before | after |
+| --- | --- | --- |
+| impassable gaps between separate objects | 3 | **0** |
+| slots too narrow to enter against a ridge | 3 | **0** |
+| boulders placed | 30 | 29 |
+| crystal clusters | 6 | 6 |
+
+Two boulders still sit *inside* a ridge, and that is left alone deliberately —
+you cannot reach them, and a rock half-buried at the foot of a cliff is a rock
+half-buried at the foot of a cliff.
+
+The rocks have moved. Same seed, different rule.
+
 ### The challenge was already in the geometry
 
 The piece had none. You found four monuments, dawn broke, and the run time

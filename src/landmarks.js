@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { R, RELIEF } from "./config.js";
+import { R, RELIEF, PASS_GAP } from "./config.js";
 import { surface, groundRadius } from "./geometry.js";
+import { distanceToRidge } from "./terrain-features.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { makeBloomable } from "./postfx.js";
 
@@ -157,7 +158,7 @@ function stoneCircle(scene, mat, dir, rand, capsules, out) {
     });
   }
   addMerged(scene, parts, mat);
-  out.push({ pos: centre, clearance: ringR + 2.4 });
+  out.push({ pos: centre, clearance: ringR + 0.6 + PASS_GAP });
 }
 
 /**
@@ -235,7 +236,7 @@ function arch(scene, mat, dir, rand, capsules, out) {
     capsules.push({ a: a.clone(), b: b.clone(), r: thick * taper * 1.2, kind: "stone", minImpact: 0.35 });
   }
   addMerged(scene, parts, mat);
-  out.push({ pos: centre, clearance: span + 2.2 });
+  out.push({ pos: centre, clearance: span + 0.75 + PASS_GAP });
 }
 
 /**
@@ -304,7 +305,7 @@ function crystals(scene, mat, dir, rand, capsules, out, clusters) {
     widest = Math.max(widest, off + w);
   }
   addMerged(scene, parts, own, { bloom: true });
-  out.push({ pos: centre, clearance: widest + 2.0 });
+  out.push({ pos: centre, clearance: widest + 0.6 + PASS_GAP });
 }
 
 /**
@@ -320,10 +321,24 @@ function crystals(scene, mat, dir, rand, capsules, out, clusters) {
 export function scatterLandmarks(scene, mats, rand, capsules, placed, counts) {
   /** One entry per crystal cluster, for the ring-when-struck pulse. */
   const clusters = [];
+  /*
+   * The third number is how much room the thing needs, and it has to cover the
+   * *largest* one of its kind that could be built, because it is checked
+   * before the thing exists and its size is still a roll of the dice.
+   *
+   * They were 7.5, 7.0 and 4.0, all of them under the structure they were
+   * reserving for. An arch spans up to 6.4 either side of its centre with legs
+   * 0.74 thick, so reserving 7.0 left less than nothing between it and its
+   * neighbour — measured, one arch was overlapping a boulder by 1.57 units.
+   *
+   *   circle   5.0 ring + 0.6 stone  + PASS_GAP
+   *   arch     6.4 span + 0.75 leg   + PASS_GAP
+   *   crystal  1.7 spread + 0.6 shard + PASS_GAP
+   */
   const kinds = [
-    ["circle", stoneCircle, mats.stone, 7.5],
-    ["arch", arch, mats.stone, 7.0],
-    ["crystal", crystals, mats.crystal, 4.0],
+    ["circle", stoneCircle, mats.stone, 5.6 + PASS_GAP],
+    ["arch", arch, mats.stone, 7.15 + PASS_GAP],
+    ["crystal", crystals, mats.crystal, 2.3 + PASS_GAP],
   ];
 
   for (const [name, build, mat, need] of kinds) {
@@ -341,6 +356,18 @@ export function scatterLandmarks(scene, mats, rand, capsules, placed, counts) {
         if (c.distanceTo(q.pos) < q.clearance + need) { ok = false; break; }
       }
       if (!ok) continue;
+
+      /*
+       * Clear of the ridges entirely — not the boulders' rule.
+       *
+       * A boulder is one convex lump, so letting it sit inside a wall is fine:
+       * you cannot reach it and there is nothing to get wedged in. These are
+       * assemblies. A stone circle allowed to straddle a ridge puts half its
+       * uprights inside the wall and the other half standing 0.6, 1.2 and 1.35
+       * units off it — a row of slots exactly too narrow to enter, which is
+       * worse than the single one that started this.
+       */
+      if (distanceToRidge(dir.x, dir.y, dir.z) - (need - PASS_GAP) < PASS_GAP) continue;
 
       build(scene, mat, dir, rand, capsules, placed, clusters);
       made++;

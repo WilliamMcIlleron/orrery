@@ -1093,6 +1093,9 @@ if (location.search.includes("dev")) {
   window.__syzygy = {
     marble, monuments, progression, audio, scene, renderer, handles, P, crystalClusters,
     rebuildPlanet, stele,
+    // Handed out so tooling can do vector maths without re-fetching the
+    // library from the CDN, which fails often enough to break a test run.
+    THREE,
     camera, chase, wayfinder, capsules, post, atmosphere,
     /** Drop the marble next to monument `i`, on the surface. */
     warpTo(i) {
